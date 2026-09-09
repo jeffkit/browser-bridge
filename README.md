@@ -150,6 +150,7 @@ pnpm --filter @browser-bridge/docs dev   # 文档站本地预览（localhost:517
 | `packages/protocol` | 线协议：消息、方法常量、错误码、参数/结果类型 |
 | `packages/gateway` | `browser-bridge-gateway` npm 包：WS server（多浏览器路由）+ MCP 双入口 + CLI（serve/mcp/relay/token） |
 | `packages/extension` | 浏览器扩展：service worker / content script / popup / options（browser.* 适配层同源构建 Chromium + Firefox） |
+| `skill/` | ZCode/AI Skill：教 Agent 用 `gateway call` 按需操控浏览器（免常驻 MCP 配置），拷贝到 `~/.agents/skills/browser-bridge/` 即装 |
 | `scripts/smoke.mjs` | 端到端冒烟脚本（含双浏览器路由验证） |
 
 详见 [ARCHITECTURE.md](./ARCHITECTURE.md)（仓内设计）与 [AGENTS.md](./AGENTS.md)（AI 协作导航）。

@@ -1,6 +1,6 @@
 {
   "name": "browser-bridge-gateway",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "browser-bridge gateway: WebSocket server for the extension + MCP server (streamable HTTP / stdio) for agents",
   "type": "module",
   "bin": {

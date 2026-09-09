@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 
 export const DEFAULT_PORT = 17833;
-export const GATEWAY_VERSION = "0.2.1";
+export const GATEWAY_VERSION = "0.3.0";
 
 export interface GatewayConfig {
   /** WS/MCP 监听端口，0 = 随机 */

@@ -101,6 +101,57 @@ async function runToken(): Promise<void> {
   console.log(generateToken());
 }
 
+interface CallOpts {
+  url: string;
+  bearer?: string;
+  args: string;
+  timeout: string;
+  saveImage?: string;
+  raw: boolean;
+}
+
+/** `call` 子命令：免常驻 MCP 配置，按需调用单个工具并输出结果。 */
+async function runCall(tool: string, o: CallOpts): Promise<void> {
+  let args: Record<string, unknown>;
+  try {
+    args = JSON.parse(o.args) as Record<string, unknown>;
+  } catch (err) {
+    console.error(`--args 不是合法 JSON：${err instanceof Error ? err.message : String(err)}`);
+    process.exitCode = 1;
+    return;
+  }
+  try {
+    const { callToolViaHttp } = await import("./mcp/client.js");
+    const { writeFileSync } = await import("node:fs");
+    const result = await callToolViaHttp({
+      url: o.url,
+      bearer: o.bearer,
+      tool,
+      args,
+      timeoutSec: Number(o.timeout) || 60,
+    });
+    if (o.raw) {
+      console.log(
+        JSON.stringify({ isError: result.isError, text: result.textParts, images: result.images }, null, 2),
+      );
+    } else {
+      for (const text of result.textParts) console.log(text);
+      for (const image of result.images) {
+        if (o.saveImage) {
+          writeFileSync(o.saveImage, Buffer.from(image.base64, "base64"));
+          console.log(`图片已保存：${o.saveImage}（${image.mimeType}）`);
+        } else {
+          console.log(`data:${image.mimeType};base64,${image.base64}`);
+        }
+      }
+    }
+    if (result.isError) process.exitCode = 1;
+  } catch (err) {
+    console.error(`调用失败：${err instanceof Error ? err.message : String(err)}`);
+    process.exitCode = 1;
+  }
+}
+
 export function runCli(argv: string[]): void {
   const program = new Command();
   program
@@ -146,6 +197,20 @@ export function runCli(argv: string[]): void {
     .description("生成一个随机 pairing token")
     .action(async () => {
       await runToken();
+    });
+
+  program
+    .command("call")
+    .description("按需调用 browser_* 工具（对 /mcp 的瘦客户端，免常驻 MCP 配置），如：call browser_snapshot")
+    .argument("<tool>", "工具名，如 browser_status / browser_snapshot / browser_click")
+    .option("--url <u>", "MCP streamable HTTP 端点（可含 /<browserId> 路径）", "http://127.0.0.1:17833/mcp")
+    .option("--bearer <t>", "Bearer token（relay 模式）；或环境变量 BROWSER_BRIDGE_BEARER", process.env.BROWSER_BRIDGE_BEARER)
+    .option("--args <json>", "工具参数 JSON", "{}")
+    .option("--timeout <sec>", "超时秒数", "60")
+    .option("--save-image <path>", "结果含图片（截图）时保存到该文件，避免输出超长 base64")
+    .option("--raw", "输出完整 JSON-RPC result 而非仅 content 文本")
+    .action(async (tool: string, opts: CallOpts) => {
+      await runCall(tool, opts);
     });
 
   program.parseAsync(argv).catch((err) => {
