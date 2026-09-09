@@ -31,15 +31,30 @@ jobs:
           fi
       - name: Publish to npm
         if: env.NPM_TOKEN_SET == 'true'
-        run: |
-          pnpm --filter @browser-bridge/protocol publish --access public --no-git-checks
-          pnpm --filter browser-bridge-gateway publish --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - name: Create GitHub Release
+        run: |
+          publish_if_absent() {
+            local pkg="$1" dir="$2"
+            local ver
+            ver=$(node -p "require('./$dir/package.json').version")
+            if npm view "$pkg@$ver" version >/dev/null 2>&1; then
+              echo "$pkg@$ver 已在 npm 上，跳过"
+            else
+              pnpm --filter "$pkg" publish --access public --no-git-checks
+            fi
+          }
+          publish_if_absent "@browser-bridge/protocol" "packages/protocol"
+          publish_if_absent "browser-bridge-gateway" "packages/gateway"
+      - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" dist-release/*.zip \
-            --title "browser-bridge ${{ github.ref_name }}" \
-            --notes "扩展安装包：chromium 解压后「加载已解压的扩展程序」；firefox 解压后 about:debugging 临时载入 manifest.json。gateway：npx browser-bridge-gateway@${{ github.ref_name }} serve。完整文档：https://jeffkit.github.io/browser-bridge/"
+          TAG="${{ github.ref_name }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist-release/*.zip --clobber
+          else
+            gh release create "$TAG" dist-release/*.zip \
+              --title "browser-bridge $TAG" \
+              --notes "扩展安装包：chromium 解压后「加载已解压的扩展程序」；firefox 解压后 about:debugging 临时载入 manifest.json。gateway：npx browser-bridge-gateway@$TAG serve。完整文档：https://jeffkit.github.io/browser-bridge/"
+          fi
