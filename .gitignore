@@ -1,6 +1,8 @@
 node_modules/
 dist/
 dist-extension/
+dist-extension-firefox/
+dist-release/
 docs/.vitepress/cache/
 *.log
 .DS_Store

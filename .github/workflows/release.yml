@@ -1,0 +1,39 @@
+name: Release
+
+# tag 推送（v*）：打包扩展 zip 发 GitHub Release；npm 发布（需 NPM_TOKEN secret，未配置则跳过）
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org/"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Package extension zips
+        run: node scripts/package.mjs
+      - name: Publish to npm
+        if: ${{ secrets.NPM_TOKEN != '' }}
+        run: |
+          pnpm --filter @browser-bridge/protocol publish --access public --no-git-checks
+          pnpm --filter browser-bridge-gateway publish --access public --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" dist-release/*.zip \
+            --title "browser-bridge ${{ github.ref_name }}" \
+            --notes "扩展安装包：chromium 解压后「加载已解压的扩展程序」；firefox 解压后 about:debugging 临时载入 manifest.json。gateway：npx browser-bridge-gateway@${{ github.ref_name }} serve。完整文档：https://jeffkit.github.io/browser-bridge/"

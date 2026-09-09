@@ -5,7 +5,7 @@
 ## 1. 启动 gateway（Agent 机器）
 
 ```bash
-node packages/gateway/dist/cli.js serve --token s3cr3t-token
+npx browser-bridge-gateway@latest serve --token s3cr3t-token
 ```
 
 常用命令：
@@ -29,7 +29,7 @@ node packages/gateway/dist/cli.js serve --token s3cr3t-token
 示例：只允许操作公司内网与 GitHub：
 
 ```bash
-node packages/gateway/dist/cli.js serve --token s3cr3t-token \
+npx browser-bridge-gateway@latest serve --token s3cr3t-token \
   --allow-url '^https://(github\.com|git\.corp\.example\.cn)/'
 ```
 
@@ -81,9 +81,9 @@ gateway 也可以由 Agent 直接拉起（单进程内含扩展 WS server + stdi
 {
   "mcpServers": {
     "browser-bridge": {
-      "command": "node",
+      "command": "npx",
       "args": [
-        "/path/to/browser-bridge/packages/gateway/dist/cli.js",
+        "browser-bridge-gateway@latest",
         "mcp", "--port", "17833", "--token", "s3cr3t-token"
       ]
     }

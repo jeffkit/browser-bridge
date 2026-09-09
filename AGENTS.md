@@ -47,16 +47,23 @@ pnpm install
 pnpm build                      # protocol → gateway → extension（Chromium + Firefox 双产物）
 pnpm test                       # gateway 测试（自动先 build）
 pnpm typecheck
-node scripts/smoke.mjs          # 端到端冒烟
-npx browser-bridge-gateway serve --token <t>   # 直连模式（或 node packages/gateway/dist/cli.js）
+pnpm smoke                      # 端到端冒烟
+pnpm package                    # 打包扩展 zip → dist-release/（Release 用）
+npx browser-bridge-gateway serve --token <t>   # 直连模式
 npx browser-bridge-gateway relay --token a --token b   # 公网中转模式
 # 加载扩展：chrome://extensions → 开发者模式 → 加载 dist-extension/
 # Firefox：about:debugging → 临时载入 dist-extension-firefox/manifest.json
+# 发布：push tag v* → release workflow 打 zip 发 GitHub Release + npm 发布（需 NPM_TOKEN secret）
 ```
+
+## 发布
+
+- **扩展**：push tag `v*` → [release workflow](./.github/workflows/release.yml) 自动打包 zip 并创建 GitHub Release。
+- **npm**：同一 workflow 发布 `@browser-bridge/protocol` 与 `browser-bridge-gateway`；需在仓库配置 `NPM_TOKEN` secret（未配置时自动跳过 npm 步骤）。本地手动发布：`pnpm --filter @browser-bridge/protocol publish --access public` 后 `pnpm --filter browser-bridge-gateway publish --access public`（pnpm 会把 workspace:* 替换为实际版本）。
 
 ## 当前状态
 
-v0.2：协议 15 方法 + browserId 多浏览器路由；MCP 14 工具、三部署形态（serve / mcp / relay）；扩展 Chromium + Firefox 双产物；gateway 测试 18 项 + 端到端冒烟（含双浏览器）全绿。未实现：扩展自动化 E2E、npm 发布（当前源码安装）。
+v0.2：协议 15 方法 + browserId 多浏览器路由；MCP 14 工具、三部署形态（serve / mcp / relay）；扩展 Chromium + Firefox 双产物；gateway 测试 18 项 + 端到端冒烟（含双浏览器）全绿；扩展 zip 与 npm 包由 tag 触发自动发布（npm 需 NPM_TOKEN）。未实现：扩展自动化 E2E。
 
 ## 深入阅读
 

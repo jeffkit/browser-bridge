@@ -3,9 +3,19 @@
   "version": "0.2.0",
   "description": "Shared wire protocol types for browser-bridge (extension ↔ gateway)",
   "type": "module",
+  "license": "MIT",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": ["dist"],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeffkit/browser-bridge.git",
+    "directory": "packages/protocol"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"

@@ -32,16 +32,10 @@ v0.2 能力：远程 Agent 经标准 MCP 操控本地真实浏览器；**多浏�
 ### 1. 起 gateway
 
 ```bash
-git clone https://github.com/jeffkit/browser-bridge.git && cd browser-bridge
-pnpm install && pnpm build
-
-node packages/gateway/dist/cli.js serve --token <你的token>
-# 或用环境变量：BROWSER_BRIDGE_TOKEN=<token> node packages/gateway/dist/cli.js serve
+# npx（推荐）；或 clone 源码后 node packages/gateway/dist/cli.js
+npx browser-bridge-gateway@latest serve --token <你的token>
+# 或用环境变量：BROWSER_BRIDGE_TOKEN=<token> npx browser-bridge-gateway@latest serve
 ```
-
-::: tip
-npm 包 `browser-bridge-gateway` 尚未发布；发布后可直接 `npx browser-bridge-gateway serve`。
-:::
 
 输出（日志在 stderr）：
 
@@ -53,13 +47,15 @@ MCP(streamable HTTP) 端点：http://0.0.0.0:17833/mcp
 
 ### 2. 装扩展（本地浏览器）
 
+**方式 A**：从 [Releases](https://github.com/jeffkit/browser-bridge/releases) 下载 `browser-bridge-extension-chromium-v*.zip` 解压 → `chrome://extensions` 开发者模式 → 「加载已解压的扩展程序」选解压目录（Firefox 下载 firefox 包后经 about:debugging 临时载入）。
+
+**方式 B**：源码构建：
+
 ```bash
 git clone git@github.com:jeffkit/browser-bridge.git && cd browser-bridge
 pnpm install && pnpm build
-# 产物在 packages/extension/dist-extension/
+# 产物在 packages/extension/dist-extension/（Chromium）与 dist-extension-firefox/（Firefox）
 ```
-
-Chrome/Edge → `chrome://extensions` → 开启「开发者模式」→「加载已解压的扩展程序」→ 选 `packages/extension/dist-extension`。
 
 打开扩展「选项」页，填：
 
@@ -90,7 +86,7 @@ Chrome/Edge → `chrome://extensions` → 开启「开发者模式」→「加�
   "mcpServers": {
     "browser-bridge": {
       "command": "npx",
-      "args": ["browser-bridge-gateway", "mcp", "--token", "<token>"]
+      "args": ["browser-bridge-gateway@latest", "mcp", "--token", "<token>"]
     }
   }
 }
