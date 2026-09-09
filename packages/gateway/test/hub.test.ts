@@ -4,7 +4,7 @@ import { openWs, recvJson, sendHello, TOKEN, waitUntil } from "./helpers.js";
 
 async function startHub(allowUrls: RegExp[] = []): Promise<BrowserHub> {
   const hub = new BrowserHub({
-    config: { port: 0, host: "127.0.0.1", token: TOKEN, allowUrls },
+    config: { port: 0, host: "127.0.0.1", allowedTokens: [TOKEN], allowUrls },
   });
   await hub.start();
   return hub;
@@ -40,10 +40,10 @@ describe("BrowserHub 扩展接入", () => {
     try {
       const ws = await openWs(hub.address.port);
       sendHello(ws);
-      await waitUntil(() => hub.session !== null);
-      expect(hub.session?.client).toEqual({ name: "fake-extension", version: "0.0.1" });
+      await waitUntil(() => hub.getSession() !== null);
+      expect(hub.getSession()?.client).toEqual({ name: "fake-extension", version: "0.0.1" });
 
-      const pending = hub.session!.request("tabs.list", {}, 3000);
+      const pending = hub.getSession()!.request("tabs.list", {}, 3000);
       const req = await recvJson(ws, "request");
       expect(req.method).toBe("tabs.list");
       ws.send(JSON.stringify({ type: "result", id: req.id, ok: true, result: { tabs: [{ id: 1 }] } }));
@@ -58,9 +58,9 @@ describe("BrowserHub 扩展接入", () => {
     try {
       const ws = await openWs(hub.address.port);
       sendHello(ws);
-      await waitUntil(() => hub.session !== null);
+      await waitUntil(() => hub.getSession() !== null);
 
-      const pending = hub.session!.request("page.click", { ref: "@e1" }, 3000);
+      const pending = hub.getSession()!.request("page.click", { ref: "@e1" }, 3000);
       const req = await recvJson(ws, "request");
       ws.send(
         JSON.stringify({
@@ -81,9 +81,9 @@ describe("BrowserHub 扩展接入", () => {
     try {
       const ws = await openWs(hub.address.port);
       sendHello(ws);
-      await waitUntil(() => hub.session !== null);
+      await waitUntil(() => hub.getSession() !== null);
 
-      await expect(hub.session!.request("page.snapshot", {}, 100)).rejects.toMatchObject({
+      await expect(hub.getSession()!.request("page.snapshot", {}, 100)).rejects.toMatchObject({
         code: "timeout",
       });
     } finally {
@@ -96,12 +96,12 @@ describe("BrowserHub 扩展接入", () => {
     try {
       const ws = await openWs(hub.address.port);
       sendHello(ws);
-      await waitUntil(() => hub.session !== null);
+      await waitUntil(() => hub.getSession() !== null);
 
-      const pending = hub.session!.request("tabs.list", {}, 5000);
+      const pending = hub.getSession()!.request("tabs.list", {}, 5000);
       ws.close();
       await expect(pending).rejects.toMatchObject({ code: "browser_disconnected" });
-      await waitUntil(() => hub.session === null);
+      await waitUntil(() => hub.getSession() === null);
     } finally {
       await hub.stop();
     }
@@ -112,19 +112,83 @@ describe("BrowserHub 扩展接入", () => {
     try {
       const ws1 = await openWs(hub.address.port);
       sendHello(ws1);
-      await waitUntil(() => hub.session !== null);
-      const first = hub.session!;
+      await waitUntil(() => hub.getSession() !== null);
+      const first = hub.getSession()!;
 
       // 监听必须先于顶替动作注册：close 事件可能在 waitUntil 轮询期间就触发
       const codePromise = new Promise<number>((resolve) => ws1.on("close", (c) => resolve(c)));
 
       const ws2 = await openWs(hub.address.port);
       sendHello(ws2);
-      await waitUntil(() => hub.session !== null && hub.session!.id !== first.id);
+      await waitUntil(() => hub.getSession() !== null && hub.getSession()!.id !== first.id);
 
       expect(await codePromise).toBe(1000);
-      expect(hub.session?.id).not.toBe(first.id);
+      expect(hub.getSession()?.id).not.toBe(first.id);
       ws2.close();
+    } finally {
+      await hub.stop();
+    }
+  });
+
+  it("非法 browserId → 4004 拒绝", async () => {
+    const hub = await startHub();
+    try {
+      const ws = await openWs(hub.address.port);
+      sendHello(ws, TOKEN, "../evil");
+      const code = await new Promise<number>((resolve) => ws.on("close", (c) => resolve(c)));
+      expect(code).toBe(4004);
+    } finally {
+      await hub.stop();
+    }
+  });
+
+  it("多浏览器：不同 browserId 并存且请求路由到对应浏览器", async () => {
+    const hub = await startHub();
+    try {
+      const wsA = await openWs(hub.address.port);
+      sendHello(wsA, TOKEN, "laptop");
+      const wsB = await openWs(hub.address.port);
+      sendHello(wsB, TOKEN, "phone");
+      await waitUntil(() => hub.getSession("laptop") !== null && hub.getSession("phone") !== null);
+
+      expect(hub.listBrowsers().map((b) => b.browserId).sort()).toEqual(["laptop", "phone"]);
+
+      const pA = hub.getSession("laptop")!.request("tabs.list", {}, 3000);
+      const reqA = await recvJson(wsA, "request");
+      wsA.send(JSON.stringify({ type: "result", id: reqA.id, ok: true, result: { tabs: "A" } }));
+      await expect(pA).resolves.toEqual({ tabs: "A" });
+
+      // B 不应收到 A 的请求；B 自己的请求独立往返
+      const pB = hub.getSession("phone")!.request("tabs.list", {}, 3000);
+      const reqB = await recvJson(wsB, "request");
+      wsB.send(JSON.stringify({ type: "result", id: reqB.id, ok: true, result: { tabs: "B" } }));
+      await expect(pB).resolves.toEqual({ tabs: "B" });
+    } finally {
+      await hub.stop();
+    }
+  });
+
+  it("同一 browserId 的新连接顶替，不影响其他 browserId", async () => {
+    const hub = await startHub();
+    try {
+      const wsL1 = await openWs(hub.address.port);
+      sendHello(wsL1, TOKEN, "laptop");
+      const wsP = await openWs(hub.address.port);
+      sendHello(wsP, TOKEN, "phone");
+      await waitUntil(
+        () => hub.getSession("laptop") !== null && hub.getSession("phone") !== null,
+      );
+      const firstLaptop = hub.getSession("laptop")!;
+      const codePromise = new Promise<number>((resolve) => wsL1.on("close", (c) => resolve(c)));
+
+      const wsL2 = await openWs(hub.address.port);
+      sendHello(wsL2, TOKEN, "laptop");
+      await waitUntil(() => hub.getSession("laptop")!.id !== firstLaptop.id);
+
+      expect(await codePromise).toBe(1000);
+      expect(hub.getSession("phone")).not.toBeNull();
+      wsL2.close();
+      wsP.close();
     } finally {
       await hub.stop();
     }
@@ -135,7 +199,7 @@ describe("BrowserHub 扩展接入", () => {
     try {
       const ws = await openWs(hub.address.port);
       sendHello(ws);
-      await waitUntil(() => hub.session !== null);
+      await waitUntil(() => hub.getSession() !== null);
 
       ws.send(JSON.stringify({ type: "ping" }));
       const pong = await recvJson(ws, "pong");

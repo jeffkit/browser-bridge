@@ -7,8 +7,8 @@
 **扩展 → gateway：**
 
 ```jsonc
-// 握手（连接后首条，10s 内）
-{ "type": "hello", "proto": 1, "auth": "<token>", "client": { "name": "...", "version": "..." } }
+// 握手（连接后首条，10s 内）；browserId 缺省为 "default"
+{ "type": "hello", "proto": 1, "auth": "<token>", "client": { "name": "...", "version": "..." }, "browserId": "laptop" }
 
 // 心跳（每 20s，兼顾 Chrome service worker 保活）
 { "type": "ping" }
@@ -27,9 +27,10 @@
 
 ## 会话规则
 
-- hello 鉴权失败 → close `4003`；协议版本不符 → close `4002`；
-- 单浏览器会话：新连接顶替旧连接（旧连接收到 close `1000`）；
-- gateway 为每个请求设超时（snapshot/evaluate 30s、navigate 20s、其余 10-15s），超时返回 `timeout`，扩展离线返回 `browser_disconnected`；
+- hello 鉴权失败 → close `4003`；协议版本不符 → close `4002`；browserId 非法（不在 `[A-Za-z0-9_-]{1,64}` 内）→ close `4004`；
+- 多浏览器：按 `browserId` 分流——同一 browserId 新连接顶替旧连接（close `1000`），不同 browserId 并存；
+- MCP 侧经 `/mcp/:browserId` 路径绑定目标浏览器；relay 模式下每个请求还需 `Authorization: Bearer <token>`；
+- gateway 为每个请求设超时（snapshot/evaluate 30s、navigate 20s、其余 10-15s），超时返回 `timeout`，浏览器离线返回 `browser_disconnected`；
 - gateway 不会主动向扩展发请求之外的任何推送。
 
 ## 方法集

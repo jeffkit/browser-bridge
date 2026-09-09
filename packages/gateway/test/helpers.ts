@@ -10,13 +10,14 @@ export function openWs(port: number): Promise<WebSocket> {
   });
 }
 
-export function sendHello(ws: WebSocket, auth: string = TOKEN): void {
+export function sendHello(ws: WebSocket, auth: string = TOKEN, browserId?: string): void {
   ws.send(
     JSON.stringify({
       type: "hello",
       proto: 1,
       auth,
       client: { name: "fake-extension", version: "0.0.1" },
+      ...(browserId !== undefined ? { browserId } : {}),
     }),
   );
 }

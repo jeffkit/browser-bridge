@@ -1,3 +1,4 @@
+import { api } from "../common/api.js";
 import { type TabInfo, type WaitFor } from "@browser-bridge/protocol";
 
 /** 带错误码的业务失败（Connection 会转成 result.error）。 */
@@ -26,12 +27,12 @@ function tabInfo(tab: chrome.tabs.Tab): TabInfo {
 async function resolveTab(tabId?: number): Promise<chrome.tabs.Tab> {
   if (typeof tabId === "number") {
     try {
-      return await chrome.tabs.get(tabId);
+      return await api.tabs.get(tabId);
     } catch {
       fail("tab_not_found", `tab ${tabId} 不存在或已关闭`);
     }
   }
-  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  const [tab] = await api.tabs.query({ active: true, lastFocusedWindow: true });
   if (!tab || typeof tab.id !== "number") {
     fail("tab_not_found", "找不到活跃标签页");
   }
@@ -48,7 +49,7 @@ async function navigate(p: {
 }): Promise<unknown> {
   const tab = await resolveTab(p.tabId);
   const tabId = tab.id as number;
-  await chrome.tabs.update(tabId, { url: p.url });
+  await api.tabs.update(tabId, { url: p.url });
 
   const waitFor = p.waitFor ?? "load";
   if (waitFor === "none") {
@@ -61,11 +62,11 @@ async function navigate(p: {
     new Promise<void>((resolve) => {
       const listener = (id: number): void => {
         if (id === tabId) {
-          chrome.tabs.onUpdated.removeListener(listener);
+          api.tabs.onUpdated.removeListener(listener);
           resolve();
         }
       };
-      chrome.tabs.onUpdated.addListener(listener);
+      api.tabs.onUpdated.addListener(listener);
       setTimeout(resolve, 800);
     }),
   ]);
@@ -84,7 +85,7 @@ async function navigate(p: {
 
   let title = tab.title ?? "";
   try {
-    const after = await chrome.tabs.get(tabId);
+    const after = await api.tabs.get(tabId);
     title = after.title ?? title;
   } catch {
     fail("tab_not_found", `导航过程中 tab ${tabId} 被关闭`);
@@ -94,7 +95,7 @@ async function navigate(p: {
 
 async function pageReadyState(tabId: number): Promise<string | null> {
   try {
-    const results = await chrome.scripting.executeScript({
+    const results = await api.scripting.executeScript({
       target: { tabId },
       func: () => document.readyState,
     });
@@ -108,11 +109,11 @@ async function screenshot(p: { tabId?: number; jpegQuality?: number }): Promise<
   const tab = await resolveTab(p.tabId);
   const tabId = tab.id as number;
   if (!tab.active) {
-    await chrome.tabs.update(tabId, { active: true });
+    await api.tabs.update(tabId, { active: true });
     await sleep(300);
   }
   try {
-    const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {
+    const dataUrl = await api.tabs.captureVisibleTab(tab.windowId, {
       format: p.jpegQuality != null ? "jpeg" : "png",
       quality: p.jpegQuality != null ? Math.min(100, Math.max(0, p.jpegQuality)) : undefined,
     });
@@ -132,17 +133,17 @@ interface ContentResponse {
 
 async function sendToTab(tabId: number, message: unknown): Promise<ContentResponse> {
   try {
-    return (await chrome.tabs.sendMessage(tabId, message)) as ContentResponse;
+    return (await api.tabs.sendMessage(tabId, message)) as ContentResponse;
   } catch (err) {
     fail("page_not_injectable", `页面通信失败（可能未注入或页面受限）：${msg(err)}`);
   }
 }
 
 async function ensureInjected(tabId: number): Promise<void> {
-  const probe = await chrome.tabs.sendMessage(tabId, { type: "bb-probe" }).catch(() => null);
+  const probe = await api.tabs.sendMessage(tabId, { type: "bb-probe" }).catch(() => null);
   if (probe && (probe as { injected?: boolean }).injected) return;
   try {
-    await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
+    await api.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
   } catch (err) {
     fail("page_not_injectable", `无法注入脚本（chrome:// 等受限页面不支持）：${msg(err)}`);
   }
@@ -188,7 +189,7 @@ async function evaluate(p: {
     fail("bad_params", `fn 非法：${msg(err)}`);
   }
   try {
-    const results = await chrome.scripting.executeScript({
+    const results = await api.scripting.executeScript({
       target: { tabId },
       world: p.world === "MAIN" ? "MAIN" : "ISOLATED",
       func: fn,
@@ -208,25 +209,25 @@ export async function dispatch(method: string, rawParams: unknown): Promise<unkn
     case "ping":
       return { pong: true, echo: params.echo, ts: Date.now() };
     case "tabs.list": {
-      const tabs = await chrome.tabs.query({});
+      const tabs = await api.tabs.query({});
       return { tabs: tabs.filter((t) => typeof t.id === "number" && t.id >= 0).map(tabInfo) };
     }
     case "tabs.get":
       return { tab: tabInfo(await resolveTab(params.tabId as number)) };
     case "tabs.create": {
-      const tab = await chrome.tabs.create({
+      const tab = await api.tabs.create({
         url: params.url as string | undefined,
         active: (params.active as boolean | undefined) ?? true,
       });
       return { tab: tabInfo(tab) };
     }
     case "tabs.close":
-      await chrome.tabs.remove(params.tabId as number);
+      await api.tabs.remove(params.tabId as number);
       return { closed: true };
     case "tabs.activate": {
       const tabId = params.tabId as number;
-      await chrome.tabs.update(tabId, { active: true });
-      return { tab: tabInfo(await chrome.tabs.get(tabId)) };
+      await api.tabs.update(tabId, { active: true });
+      return { tab: tabInfo(await api.tabs.get(tabId)) };
     }
     case "tabs.navigate":
       return navigate(params as never);

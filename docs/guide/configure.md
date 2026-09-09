@@ -8,13 +8,22 @@
 node packages/gateway/dist/cli.js serve --token s3cr3t-token
 ```
 
-常用参数：
+常用命令：
+
+| 命令 | 场景 |
+|------|------|
+| `serve` | 常驻：扩展 WS + MCP streamable HTTP（本页余下内容） |
+| `relay` | 公网中转：双 NAT / 多浏览器集中管理，见 [Relay](./relay) |
+| `mcp` | 由同机 Agent 以 stdio 拉起 |
+| `token` | 生成随机 token |
+
+`serve` 常用参数：
 
 | 参数 | 默认 | 说明 |
 |------|------|------|
 | `-p, --port <n>` | `17833` | 监听端口，`0` 为随机 |
 | `--host <h>` | `0.0.0.0` | 监听地址 |
-| `--token <t>` | 环境变量 `BROWSER_BRIDGE_TOKEN`，都没有则随机生成并打印 | 扩展握手 token |
+| `--token <t>` | 环境变量 `BROWSER_BRIDGE_TOKEN`，都没有则随机生成并打印 | 扩展握手 token；**可重复提供**（relay 注册表） |
 | `--allow-url <regex>` | 不限制 | URL 允许列表正则，**可多次提供**，限制 Agent 可导航的站点 |
 
 示例：只允许操作公司内网与 GitHub：
@@ -35,12 +44,13 @@ bridge.example.com {
 
 ## 2. 配置扩展（本地浏览器）
 
-点浏览器工具栏的 browser-bridge 图标 → **打开设置**，填两项：
+点浏览器工具栏的 browser-bridge 图标 → **打开设置**，填三项：
 
 | 字段 | 值 |
 |------|-----|
 | **Gateway 地址** | `ws://<Agent 机器 IP>:17833`；经反代 / Tailscale 加密时用 `wss://bridge.example.com` |
 | **Pairing Token** | 与 gateway `--token` 完全一致 |
+| **浏览器 ID** | 留空（单浏览器）；连多台时填唯一设备名如 `laptop`，Agent 经 `/mcp/<浏览器ID>` 指定目标（见 [Relay](./relay)） |
 
 保存后扩展立即重连。点开 popup：**绿点 = 已连接**；黄点 = 连接中；红点 = 出错（下方会显示原因）。
 

@@ -2,7 +2,9 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { WebSocketServer, type WebSocket } from "ws";
 import {
   bridgeError,
+  BROWSER_ID_PATTERN,
   ErrorCode,
+  DEFAULT_BROWSER_ID,
   HANDSHAKE_TIMEOUT_MS,
   HelloMessage,
   parseWireMessage,
@@ -20,16 +22,23 @@ export interface BrowserHubOptions {
   log?: (msg: string) => void;
 }
 
+export interface ConnectedBrowser {
+  browserId: string;
+  client: SessionClientInfo;
+}
+
 /**
  * 浏览器侧接入枢纽：
- * - WS server（根路径）承载扩展出站连接，hello+token 鉴权，新连接顶替旧连接
+ * - WS server（根路径）承载扩展出站连接，hello+token 鉴权
+ * - 多浏览器：按 hello.browserId 分流；同 browserId 新连接顶替旧连接，不同 browserId 并存
  * - 同一 HTTP server 挂 /healthz 与 MCP streamable HTTP（经 httpHandler）
  * - checkUrl 提供 --allow-url 允许列表校验
  */
 export class BrowserHub {
   private httpServer: Server;
   private wss: WebSocketServer;
-  private current: BrowserSession | null = null;
+  /** browserId → 会话 */
+  private sessions = new Map<string, BrowserSession>();
   private log: (msg: string) => void;
 
   constructor(private opts: BrowserHubOptions) {
@@ -43,8 +52,17 @@ export class BrowserHub {
     });
   }
 
-  get session(): BrowserSession | null {
-    return this.current;
+  /** 取指定浏览器的会话（缺省 default）；未连接返回 null。 */
+  getSession(browserId: string = DEFAULT_BROWSER_ID): BrowserSession | null {
+    return this.sessions.get(browserId) ?? null;
+  }
+
+  /** 当前在线的浏览器列表（browser_status 展示用）。 */
+  listBrowsers(): ConnectedBrowser[] {
+    return [...this.sessions.entries()].map(([browserId, s]) => ({
+      browserId,
+      client: s.client,
+    }));
   }
 
   get address(): { port: number; host: string } {
@@ -62,12 +80,12 @@ export class BrowserHub {
         resolve();
       });
     });
-    this.log(`gateway 监听 ws://${host}:${this.address.port}（/healthz、/mcp）`);
+    this.log(`gateway 监听 ws://${host}:${this.address.port}（/healthz、/mcp[/:browserId]）`);
   }
 
   async stop(): Promise<void> {
-    this.current?.close("gateway stopping");
-    this.current = null;
+    for (const session of this.sessions.values()) session.close("gateway stopping");
+    this.sessions.clear();
     for (const client of this.wss.clients) client.terminate();
     await new Promise<void>((resolve) => this.wss.close(() => resolve()));
     await new Promise<void>((resolve) => this.httpServer.close(() => resolve()));
@@ -100,10 +118,10 @@ export class BrowserHub {
   }
 
   private async handleHttp(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const path = (req.url ?? "/").split("?")[0];
+    const path = (req.url ?? "/").split("?")[0] ?? "/";
     if (path === "/healthz") {
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ ok: true, connected: this.current !== null }));
+      res.end(JSON.stringify({ ok: true, browsers: this.listBrowsers().length }));
       return;
     }
     if (this.opts.httpHandler) {
@@ -133,23 +151,32 @@ export class BrowserHub {
       ws.close(4002, "protocol version mismatch");
       return;
     }
-    if (hello.auth !== this.opts.config.token) {
+    if (!this.opts.config.allowedTokens.includes(hello.auth)) {
       this.log(`token 校验失败，拒绝连接`);
       ws.close(4003, "auth failed");
       return;
     }
+    const browserId = hello.browserId ?? DEFAULT_BROWSER_ID;
+    if (!BROWSER_ID_PATTERN.test(browserId)) {
+      this.log(`browserId 非法（需匹配 ${BROWSER_ID_PATTERN}）：${browserId}`);
+      ws.close(4004, "invalid browserId");
+      return;
+    }
 
     const client: SessionClientInfo = { name: hello.client.name, version: hello.client.version };
-    const session = new BrowserSession(newSessionId(), ws, client, this.log);
+    const session = new BrowserSession(newSessionId(), ws, client, hello.auth, this.log);
 
-    // v1 单浏览器会话：新连接顶替旧连接
-    if (this.current) {
-      this.log(`新扩展连接 ${session.id}（${client.name} v${client.version}）顶替 ${this.current.id}`);
-      this.current.close("replaced by new connection");
+    // 同一 browserId：新连接顶替旧连接；不同 browserId 并存
+    const existing = this.sessions.get(browserId);
+    if (existing) {
+      this.log(
+        `浏览器「${browserId}」新连接 ${session.id}（${client.name} v${client.version}）顶替 ${existing.id}`,
+      );
+      existing.close("replaced by new connection");
     } else {
-      this.log(`扩展已连接 ${session.id}（${client.name} v${client.version}）`);
+      this.log(`浏览器「${browserId}」已连接 ${session.id}（${client.name} v${client.version}）`);
     }
-    this.current = session;
+    this.sessions.set(browserId, session);
 
     ws.on("message", (data) => {
       const msg = parseWireMessage(String(data));
@@ -157,12 +184,12 @@ export class BrowserHub {
         this.log(`无法识别的消息：${String(data).slice(0, 200)}`);
         return;
       }
-      this.current?.handleMessage(msg);
+      if (this.sessions.get(browserId) === session) session.handleMessage(msg);
     });
     ws.on("close", () => {
-      if (this.current === session) {
-        this.log("扩展连接断开");
-        this.current = null;
+      if (this.sessions.get(browserId) === session) {
+        this.log(`浏览器「${browserId}」连接断开`);
+        this.sessions.delete(browserId);
       }
       session.close("socket closed");
     });

@@ -1,3 +1,4 @@
+import { api } from "../common/api.js";
 import { takeSnapshot } from "./snapshot.js";
 import { doClick, doFill, doPress, doScroll, doType } from "./interact.js";
 
@@ -43,7 +44,7 @@ async function handle(method: string, params: Record<string, unknown>): Promise<
   }
 }
 
-chrome.runtime.onMessage.addListener((msg: TabMessage, _sender, sendResponse) => {
+api.runtime.onMessage.addListener((msg: TabMessage, _sender, sendResponse) => {
   if (msg.type === "bb-probe") {
     sendResponse({ injected: true });
     return false;

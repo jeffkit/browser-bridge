@@ -22,6 +22,7 @@ export default defineConfig({
             { text: "介绍", link: "/guide/introduction" },
             { text: "安装", link: "/guide/install" },
             { text: "配置", link: "/guide/configure" },
+            { text: "公网中转（Relay）", link: "/guide/relay" },
             { text: "使用", link: "/guide/usage" },
             { text: "安全", link: "/guide/security" },
           ],

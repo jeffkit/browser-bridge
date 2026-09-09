@@ -30,6 +30,8 @@ export class BrowserSession {
     readonly id: string,
     private ws: WebSocket,
     readonly client: SessionClientInfo,
+    /** 该会话握手用的 token（relay 模式下 MCP Bearer 需与其绑定） */
+    readonly token: string,
     private log: (msg: string) => void,
   ) {}
 

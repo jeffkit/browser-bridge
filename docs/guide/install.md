@@ -68,6 +68,17 @@ pnpm install && pnpm build
 安装时浏览器会提示「**读取和更改您在所有网站上的数据**」——这是全页面操控与截图能力所必需的（详见[安全](./security)）。请只在信任的机器上安装本扩展。
 :::
 
+### Firefox（可选）
+
+Firefox 版产物随同构建（`dist-extension-firefox/`），要求 Firefox ≥ 128：
+
+1. 打开 `about:debugging#/runtime/this-firefox`
+2. 点「**临时载入附加组件…**」，选择 `dist-extension-firefox/manifest.json`
+3. 与 Chromium 版的差异：
+   - 背景页是**事件页**（非 service worker），行为一致但「临时载入」在浏览器重启后失效；长期使用需用 [web-ext](https://github.com/mozilla/web-ext) 签名或自行分发 xpi；
+   - `host_permissions` 在 Firefox 是**可选权限**：装完到 `about:addons` → browser-bridge → 「权限」页，勾选「**访问所有网站的数据**」，否则无法在普通网页上注入与交互；
+   - options 配置流程与 Chromium 完全一致。
+
 ## 3. 验证
 
 - 扩展 popup（点工具栏图标）此时应显示「未连接」——正常，还没配置地址；

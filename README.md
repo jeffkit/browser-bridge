@@ -3,7 +3,9 @@
 > 远程 Agent ↔ 本地浏览器桥：Chrome/Edge (MV3) 扩展 + MCP gateway。
 > 你的 Agent 跑在远程机器上，经标准 MCP 操控你本地浏览器：导航、快照、点击输入、截图、执行脚本。
 
-**📖 文档站：<https://jeffkit.github.io/browser-bridge/>**（安装 / 配置 / 使用 / 安全 / FAQ 完整指南）
+**📖 文档站：<https://jeffkit.github.io/browser-bridge/>**（安装 / 配置 / 中转部署 / 使用 / 安全 / FAQ 完整指南）
+
+v0.2 能力：远程 Agent 经标准 MCP 操控本地真实浏览器；**多浏览器会话**（`browserId` 路由，`/mcp/<浏览器ID>` 指定目标）；**公网 relay 模式**（双方都在 NAT 后时中转，多 token 注册表 + MCP 强制 Bearer）；**Firefox 支持**（与 Chromium 版同源构建）。
 
 与 [web-bridge](https://github.com/jeffkit/web-bridge) 呼应成对：web-bridge 注入操控桌面应用 WebView；browser-bridge 操控真实浏览器。协议形状一致（`{id, method, params}` 请求 / `{id, ok, result|error}` 应答），`@eN` 元素引用心智相同。
 
@@ -110,10 +112,11 @@ Chrome/Edge → `chrome://extensions` → 开启「开发者模式」→「加�
 
 ## 安全模型
 
-- **token 鉴权**：扩展 hello 握手携带，不匹配即断（WS close 4003）。token 只存在于扩展本地存储与 gateway 进程参数。
+- **token 鉴权**：扩展 hello 握手携带，不匹配即断（WS close 4003）。`relay` 模式支持多 token 注册表，且 MCP 每请求强制 `Authorization: Bearer`。
+- **多浏览器会话**：扩展以 `browserId` 标识设备，同一 gateway/relay 可并存多台浏览器；MCP 经 `/mcp/<浏览器ID>` 绑定目标。已在线的浏览器槽位只认其配对 token。
 - **传输加密**：gateway 不做 TLS 终结。公网部署请前置 caddy/nginx 提供 `wss://`，或走 Tailscale 等加密网络；`ws://` 仅限可信内网。
 - **URL 允许列表**（可选）：`--allow-url <regex>`（可多次），限制 `navigate`/`tab_open` 的目标 URL，越界返回 `url_not_allowed`。缺省不限制。
-- **权限**：扩展申请 `tabs`/`scripting`/`storage` + `<all_urls>`（全操控与截图所需），安装时浏览器会提示「读取和更改您在所有网站上的数据」。
+- **权限**：扩展申请 `tabs`/`scripting`/`storage` + `<all_urls>`（全操控与截图所需），安装时浏览器会提示「读取和更改您在所有网站上的数据」。Firefox 版 `host_permissions` 为可选权限，需在 about:addons 手动授予。
 - 单浏览器会话：新扩展连接顶替旧连接；MCP 调用期间扩展断开会返回 `browser_disconnected`。
 
 ## 验收清单（手工，扩展端）
@@ -147,8 +150,8 @@ pnpm --filter @browser-bridge/docs dev   # 文档站本地预览（localhost:517
 | 路径 | 说明 |
 |------|------|
 | `packages/protocol` | 线协议：消息、方法常量、错误码、参数/结果类型 |
-| `packages/gateway` | `browser-bridge-gateway` npm 包：WS server + MCP 双入口 + CLI |
-| `packages/extension` | MV3 扩展：service worker / content script / popup / options |
-| `scripts/smoke.mjs` | 端到端冒烟脚本 |
+| `packages/gateway` | `browser-bridge-gateway` npm 包：WS server（多浏览器路由）+ MCP 双入口 + CLI（serve/mcp/relay/token） |
+| `packages/extension` | 浏览器扩展：service worker / content script / popup / options（browser.* 适配层同源构建 Chromium + Firefox） |
+| `scripts/smoke.mjs` | 端到端冒烟脚本（含双浏览器路由验证） |
 
 详见 [ARCHITECTURE.md](./ARCHITECTURE.md)（仓内设计）与 [AGENTS.md](./AGENTS.md)（AI 协作导航）。

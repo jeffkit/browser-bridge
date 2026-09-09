@@ -6,7 +6,7 @@ gateway 暴露的全部工具。除标注外，`tabId` 均为可选参数，缺�
 
 ### `browser_status`
 
-返回 `{ connected, client, gatewayVersion, allowUrlsEnabled }`。排查连接问题的第一步。
+返回 `{ connected, browserId, client, gatewayVersion, allowUrlsEnabled, browsers }`。排查连接问题的第一步；`browsers` 列出当前在线的全部浏览器（多浏览器 / relay 场景用它确认设备名），本工具绑定哪个浏览器由接入 URL 决定：`/mcp` → default，`/mcp/<浏览器ID>` → 对应设备。
 
 ## 标签页
 

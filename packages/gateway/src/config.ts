@@ -1,14 +1,14 @@
 import { randomBytes } from "node:crypto";
 
 export const DEFAULT_PORT = 17833;
-export const GATEWAY_VERSION = "0.1.0";
+export const GATEWAY_VERSION = "0.2.0";
 
 export interface GatewayConfig {
   /** WS/MCP 监听端口，0 = 随机 */
   port: number;
   host: string;
-  /** 扩展握手 token；缺省时由 CLI 生成随机值并打印 */
-  token: string;
+  /** 扩展握手 token 注册表；relay 模式可多个。至少一项（CLI 层保证，缺省随机生成） */
+  allowedTokens: string[];
   /** URL 允许列表（正则）；空 = 不限制。作用于 navigate/create 的目标 URL */
   allowUrls: RegExp[];
 }

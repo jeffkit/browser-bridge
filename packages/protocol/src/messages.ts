@@ -8,6 +8,12 @@ export const HEARTBEAT_INTERVAL_MS = 20_000;
 /** hello 握手超时（毫秒），超时未完成鉴权即断开。 */
 export const HANDSHAKE_TIMEOUT_MS = 10_000;
 
+/** 缺省浏览器标识：单浏览器场景无需配置。 */
+export const DEFAULT_BROWSER_ID = "default";
+
+/** browserId 合法字符：URL 路径安全（/mcp/:browserId 路由用）。 */
+export const BROWSER_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+
 /**
  * 扩展 → gateway：握手。首条消息必须是 hello，auth 校验失败即断开。
  */
@@ -16,6 +22,8 @@ export interface HelloMessage {
   proto: number;
   auth: string;
   client: { name: string; version: string };
+  /** 多浏览器标识：同一 gateway/relay 可同时挂多台浏览器，按此分流；缺省 default */
+  browserId?: string;
 }
 
 /** 扩展 → gateway：心跳（SW 保活，Chrome ≥116 WS 活动会重置 idle timer）。 */

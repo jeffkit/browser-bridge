@@ -6,6 +6,7 @@ import {
   type ResultMessage,
   type WireMessage,
 } from "@browser-bridge/protocol";
+import { api } from "../common/api.js";
 import { loadConfig, onConfigChanged, type ExtConfig } from "../common/config.js";
 
 export type ConnectionState = "disconnected" | "connecting" | "connected" | "error";
@@ -33,7 +34,7 @@ export class Connection {
   private heartbeat: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private backoffMs = 1_000;
-  private cfg: ExtConfig = { gatewayUrl: "", token: "" };
+  private cfg: ExtConfig = { gatewayUrl: "", token: "", browserId: "" };
   private started = false;
 
   async start(): Promise<void> {
@@ -78,7 +79,8 @@ export class Connection {
         type: "hello",
         proto: PROTOCOL_VERSION,
         auth: token,
-        client: { name: "browser-bridge-extension", version: chrome.runtime.getManifest().version },
+        client: { name: "browser-bridge-extension", version: api.runtime.getManifest().version },
+        browserId: this.cfg.browserId.trim() || undefined,
       };
       ws.send(JSON.stringify(hello));
       this.status = "connected";

@@ -35,7 +35,7 @@ for (let i = 0; i < 100 && port === null; i++) {
 if (!port) fail("未从 gateway 日志解析到端口");
 console.log(`✓ gateway 已启动 :${port}`);
 
-// --- 假扩展 ---
+// --- 假扩展（default 浏览器） ---
 const ws = new WebSocket(`ws://127.0.0.1:${port}`);
 ws.addEventListener("open", () => {
   ws.send(
@@ -43,7 +43,7 @@ ws.addEventListener("open", () => {
       type: "hello",
       proto: 1,
       auth: TOKEN,
-      client: { name: "fake-extension", version: "0.0.1" },
+      client: { name: "fake-extension", version: "0.2.0" },
     }),
   );
 });
@@ -71,12 +71,43 @@ await new Promise((resolve, reject) => {
   ws.addEventListener("open", resolve);
   ws.addEventListener("error", reject);
 });
-console.log("✓ 假扩展已接入");
+console.log("✓ 假扩展（default）已接入");
+
+// --- 第二台假扩展（laptop），验证多浏览器路由 ---
+const wsLaptop = new WebSocket(`ws://127.0.0.1:${port}`);
+wsLaptop.addEventListener("open", () => {
+  wsLaptop.send(
+    JSON.stringify({
+      type: "hello",
+      proto: 1,
+      auth: TOKEN,
+      client: { name: "fake-extension", version: "0.2.0" },
+      browserId: "laptop",
+    }),
+  );
+});
+wsLaptop.addEventListener("message", (event) => {
+  const msg = JSON.parse(String(event.data));
+  if (msg.type !== "request") return;
+  wsLaptop.send(
+    JSON.stringify({
+      type: "result",
+      id: msg.id,
+      ok: true,
+      result: { tabs: [{ id: 9, windowId: 1, title: "Laptop Tab", url: "https://example.com/laptop", active: true }] },
+    }),
+  );
+});
+await new Promise((resolve, reject) => {
+  wsLaptop.addEventListener("open", resolve);
+  wsLaptop.addEventListener("error", reject);
+});
+console.log("✓ 假扩展（laptop）已接入");
 
 // --- MCP streamable HTTP ---
 const base = `http://127.0.0.1:${port}`;
-const post = async (body, sessionId) => {
-  const res = await fetch(`${base}/mcp`, {
+const post = async (body, sessionId, path = "/mcp") => {
+  const res = await fetch(`${base}${path}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -129,11 +160,41 @@ const blocked = await call("browser_navigate", { url: "https://evil.example.org/
 if (!blocked.isError || !blocked.text.includes("url_not_allowed")) fail(`allow-url 拦截失效：${blocked.text}`);
 console.log("✓ browser_navigate：allow-url 外被拦截");
 
+// --- 多浏览器路由：/mcp/laptop 绑定 laptop ---
+const initLaptop = await post(
+  {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "initialize",
+    params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "smoke", version: "0" } },
+  },
+  undefined,
+  "/mcp/laptop",
+);
+if (initLaptop.status !== 200 || !initLaptop.sessionId) fail(`laptop initialize 失败：${initLaptop.status}`);
+const sidLaptop = initLaptop.sessionId;
+await post({ jsonrpc: "2.0", method: "notifications/initialized" }, sidLaptop, "/mcp/laptop");
+const laptopTabs = await callLaptop("browser_tab_list", {}, 6);
+if (laptopTabs.isError || JSON.parse(laptopTabs.text).tabs?.[0]?.title !== "Laptop Tab") {
+  fail(`laptop 路由失败：${laptopTabs.text}`);
+}
+console.log("✓ /mcp/laptop：多浏览器按 browserId 正确路由");
+
 const health = await fetch(`${base}/healthz`);
-if ((await health.json()).connected !== true) fail("healthz 未报告扩展在线");
-console.log("✓ healthz 正常");
+if ((await health.json()).browsers !== 2) fail("healthz 未报告 2 台在线浏览器");
+console.log("✓ healthz 正常（browsers=2）");
 
 ws.close();
+wsLaptop.close();
 child.kill();
 console.log("\n冒烟通过 ✓");
 process.exit(0);
+
+// laptop 会话的工具调用 helper（依赖上面的 sidLaptop，置于文件尾以复用 post）
+function callLaptop(name, args, id) {
+  return post(
+    { jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } },
+    sidLaptop,
+    "/mcp/laptop",
+  ).then((r) => ({ isError: r.body?.result?.isError === true, text: r.body?.result?.content?.[0]?.text ?? "", result: r.body?.result ?? {} }));
+}

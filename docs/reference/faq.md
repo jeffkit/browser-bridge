@@ -53,7 +53,15 @@ bridge 已按受控组件方式派发 `input`/`change` 事件；若仍无效，�
 
 ### 双方都在 NAT 后怎么办
 
-用 Tailscale / WireGuard 组网后按内网方式连。纯公网 relay 中转在协议上已预留，暂未内置。
+用 Tailscale / WireGuard 组网后按内网方式连，或部署 [relay](/guide/relay)（公网中转，扩展与 Agent 都出站连接）。
+
+### relay 返回 401
+
+MCP 请求缺 `Authorization: Bearer <token>` 或 token 不在 relay 注册表内。另外注意：**浏览器在线时，Bearer 必须是它握手用的那个 token**——用 A 的 token 去连 B 浏览器的 `/mcp/<id>` 会被拒。
+
+### 连错浏览器（多浏览器场景）
+
+MCP URL 的路径决定目标：`/mcp` 是 default，`/mcp/laptop` 是浏览器 ID 为 `laptop` 的设备。用 `browser_status` 的 `browsers` 字段核对在线设备名。
 
 ## 其他
 

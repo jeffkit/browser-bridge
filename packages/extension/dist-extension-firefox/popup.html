@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body {
+        width: 260px;
+        margin: 0;
+        padding: 14px;
+        font-family: system-ui, sans-serif;
+        font-size: 13px;
+        color: #1f2328;
+      }
+      h1 { font-size: 14px; margin: 0 0 10px; }
+      .row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+      .dot { width: 10px; height: 10px; border-radius: 50%; background: #9a9a9a; }
+      .dot.connected { background: #1a7f37; }
+      .dot.connecting { background: #bf8700; }
+      .dot.error { background: #cf222e; }
+      #error { color: #cf222e; word-break: break-all; margin-bottom: 10px; }
+      button {
+        width: 100%;
+        padding: 6px;
+        border: 1px solid #d0d7de;
+        border-radius: 6px;
+        background: #f6f8fa;
+        cursor: pointer;
+      }
+      button:hover { background: #eef1f4; }
+    </style>
+  </head>
+  <body>
+    <h1>browser-bridge</h1>
+    <div class="row"><span class="dot" id="dot"></span><span id="status">加载中…</span></div>
+    <div id="error"></div>
+    <button id="open-options">打开设置</button>
+    <script src="popup.js"></script>
+  </body>
+</html>
