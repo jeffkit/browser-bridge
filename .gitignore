@@ -1,5 +1,6 @@
 node_modules/
 dist/
 dist-extension/
+docs/.vitepress/cache/
 *.log
 .DS_Store

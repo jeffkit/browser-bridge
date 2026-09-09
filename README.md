@@ -3,6 +3,8 @@
 > 远程 Agent ↔ 本地浏览器桥：Chrome/Edge (MV3) 扩展 + MCP gateway。
 > 你的 Agent 跑在远程机器上，经标准 MCP 操控你本地浏览器：导航、快照、点击输入、截图、执行脚本。
 
+**📖 文档站：<https://jeffkit.github.io/browser-bridge/>**（安装 / 配置 / 使用 / 安全 / FAQ 完整指南）
+
 与 [web-bridge](https://github.com/jeffkit/web-bridge) 呼应成对：web-bridge 注入操控桌面应用 WebView；browser-bridge 操控真实浏览器。协议形状一致（`{id, method, params}` 请求 / `{id, ok, result|error}` 应答），`@eN` 元素引用心智相同。
 
 ## 架构
@@ -28,10 +30,16 @@
 ### 1. 起 gateway
 
 ```bash
-npx browser-bridge-gateway serve --token <你的token>
-# 或用环境变量
-BROWSER_BRIDGE_TOKEN=<token> npx browser-bridge-gateway serve
+git clone https://github.com/jeffkit/browser-bridge.git && cd browser-bridge
+pnpm install && pnpm build
+
+node packages/gateway/dist/cli.js serve --token <你的token>
+# 或用环境变量：BROWSER_BRIDGE_TOKEN=<token> node packages/gateway/dist/cli.js serve
 ```
+
+::: tip
+npm 包 `browser-bridge-gateway` 尚未发布；发布后可直接 `npx browser-bridge-gateway serve`。
+:::
 
 输出（日志在 stderr）：
 
@@ -127,7 +135,10 @@ pnpm build            # protocol(tsc) → gateway(tsc) → extension(esbuild)
 pnpm test             # gateway 13 项单测/集成测（先 build）
 pnpm typecheck        # 三包类型检查
 node scripts/smoke.mjs  # 端到端冒烟：gateway serve + 假扩展 + MCP HTTP 全链路
+pnpm --filter @browser-bridge/docs dev   # 文档站本地预览（localhost:5173）
 ```
+
+文档站部署：push 到 main 且改动 `docs/**` 时，[deploy-docs workflow](./.github/workflows/deploy-docs.yml) 自动构建并发到 GitHub Pages。
 
 需要 Chrome ≥ 116（依赖 WS 活动重置 service worker idle timer 的保活语义）。
 

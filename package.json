@@ -2,6 +2,7 @@
   "name": "browser-bridge",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@10.11.0",
   "description": "Remote agent ↔ local browser bridge: MV3 extension + MCP gateway",
   "scripts": {
     "build": "pnpm -r build",
