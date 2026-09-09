@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>browser-bridge 设置</title>
+    <style>
+      body {
+        max-width: 560px;
+        margin: 40px auto;
+        padding: 0 20px;
+        font-family: system-ui, sans-serif;
+        font-size: 14px;
+        color: #1f2328;
+      }
+      h1 { font-size: 18px; }
+      label { display: block; margin: 16px 0 4px; font-weight: 600; }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px;
+        border: 1px solid #d0d7de;
+        border-radius: 6px;
+        font-family: ui-monospace, monospace;
+      }
+      .hint { color: #59636e; font-size: 12px; margin-top: 4px; }
+      button {
+        margin-top: 20px;
+        padding: 8px 18px;
+        border: 1px solid #d0d7de;
+        border-radius: 6px;
+        background: #f6f8fa;
+        cursor: pointer;
+      }
+      button.primary { background: #1a7f37; border-color: #1a7f37; color: #fff; }
+      #saved { color: #1a7f37; margin-left: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>browser-bridge 设置</h1>
+    <p>
+      本扩展把你的浏览器暴露给运行在远程机器上的 Agent。数据经 gateway 中转，请妥善保管
+      token，并优先使用 wss://（TLS）或 Tailscale 等加密网络。
+    </p>
+    <label for="gateway-url">Gateway 地址</label>
+    <input id="gateway-url" type="text" placeholder="ws://192.168.1.5:17833 或 wss://bridge.example.com" />
+    <div class="hint">gateway 服务端输出「扩展连接地址」即为该值。</div>
+
+    <label for="token">Pairing Token</label>
+    <input id="token" type="password" placeholder="gateway --token 的值" />
+    <div class="hint">与 gateway 启动时的 token 一致，用于扩展握手鉴权。</div>
+
+    <button id="save" class="primary">保存并立即重连</button>
+    <span id="saved"></span>
+    <script src="options.js"></script>
+  </body>
+</html>
