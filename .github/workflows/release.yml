@@ -34,18 +34,13 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          publish_if_absent() {
-            local pkg="$1" dir="$2"
-            local ver
-            ver=$(node -p "require('./$dir/package.json').version")
-            if npm view "$pkg@$ver" version >/dev/null 2>&1; then
-              echo "$pkg@$ver 已在 npm 上，跳过"
-            else
-              pnpm --filter "$pkg" publish --access public --no-git-checks
-            fi
-          }
-          publish_if_absent "@browser-bridge/protocol" "packages/protocol"
-          publish_if_absent "browser-bridge-gateway" "packages/gateway"
+          # 只发布 gateway（protocol 由 esbuild 打进 bundle，是 workspace 内部包）
+          ver=$(node -p "require('./packages/gateway/package.json').version")
+          if npm view "browser-bridge-gateway@$ver" version >/dev/null 2>&1; then
+            echo "browser-bridge-gateway@$ver 已在 npm 上，跳过"
+          else
+            pnpm --filter browser-bridge-gateway publish --access public --no-git-checks
+          fi
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
