@@ -29,7 +29,9 @@ v0.2 能力：远程 Agent 经标准 MCP 操控本地真实浏览器；**多浏�
 
 ## 快速开始
 
-### 1. 起 gateway
+> **组件跑在哪？** 你的本地机器**只装浏览器扩展、不跑任何服务**——扩展只发出站连接。gateway 跑在 **Agent 所在的远程机器**上（下文所有 `npx` / `node` 命令都在 Agent 机器执行）；仅当双方都在 NAT 后时，才额外需要一台你的公网 VPS 跑 relay。
+
+### 1. 起 gateway（在 Agent 机器上）
 
 ```bash
 # npx（推荐）；或 clone 源码后 node packages/gateway/dist/cli.js
