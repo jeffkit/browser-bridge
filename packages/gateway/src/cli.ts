@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import type { IncomingMessage } from "node:http";
 import { Command } from "commander";
@@ -153,7 +154,15 @@ export function runCli(argv: string[]): void {
   });
 }
 
-// 直接执行（node dist/cli.js / npx bin）时启动；被测试 import 时不启动
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  runCli(process.argv);
+// 直接执行（node dist/cli.js / npm bin / npx）时启动；被测试 import 时不启动。
+// argv[1] 经 .bin symlink 调用时是链接路径，必须 realpath 后再与 import.meta.url 比较
+if (process.argv[1]) {
+  try {
+    const entry = pathToFileURL(realpathSync(process.argv[1])).href;
+    if (import.meta.url === entry) {
+      runCli(process.argv);
+    }
+  } catch {
+    /* argv[1] 不存在等异常：非直接执行场景 */
+  }
 }
