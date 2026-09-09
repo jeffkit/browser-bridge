@@ -23,8 +23,14 @@ jobs:
       - run: pnpm build
       - name: Package extension zips
         run: node scripts/package.mjs
+      # step if 不允许 secrets 上下文：先探测并写入 GITHUB_ENV
+      - name: Check NPM_TOKEN configured
+        run: |
+          if [ -n "${{ secrets.NPM_TOKEN }}" ]; then
+            echo "NPM_TOKEN_SET=true" >> "$GITHUB_ENV"
+          fi
       - name: Publish to npm
-        if: ${{ secrets.NPM_TOKEN != '' }}
+        if: env.NPM_TOKEN_SET == 'true'
         run: |
           pnpm --filter @browser-bridge/protocol publish --access public --no-git-checks
           pnpm --filter browser-bridge-gateway publish --access public --no-git-checks
