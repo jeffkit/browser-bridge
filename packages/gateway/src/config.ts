@@ -1,7 +1,11 @@
+import { createRequire } from "node:module";
 import { randomBytes } from "node:crypto";
 
 export const DEFAULT_PORT = 17833;
-export const GATEWAY_VERSION = "0.3.0";
+// 版本号唯一来源是 package.json（运行时经 createRequire 读取；bundle 后指向 npm 包自身，
+// 避免再出现发版忘改常量导致 serverInfo 版本漂移）
+const require = createRequire(import.meta.url);
+export const GATEWAY_VERSION: string = require("../package.json").version;
 
 export interface GatewayConfig {
   /** WS/MCP 监听端口，0 = 随机 */
