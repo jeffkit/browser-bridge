@@ -103,7 +103,7 @@ pnpm install && pnpm build
 | `browser_navigate` | 导航并等待（`waitFor: load/domcontentloaded/none`） |
 | `browser_snapshot` | 可访问性快照：缩进文本骨架 + `@eN` 元素引用 |
 | `browser_click` / `browser_fill` / `browser_type` / `browser_press` / `browser_scroll` | 页面交互（按 `@eN` 引用） |
-| `browser_evaluate` | 页面内执行 JS（默认 ISOLATED world，可 MAIN） |
+| `browser_evaluate` | 页面内执行 JS（MAIN world 页面上下文；ISOLATED 因 MV3 扩展 CSP 禁 eval 不可用） |
 | `browser_screenshot` | 可见区域截图（PNG / JPEG），返回图片内容 |
 
 推荐流程：`browser_snapshot` → 读 `@eN` → `browser_click/fill/...`。页面跳转后旧引用失效（`stale_ref`），重新快照即可。

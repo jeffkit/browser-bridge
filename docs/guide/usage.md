@@ -57,7 +57,7 @@ Agent: browser_screenshot
 
 - **`browser_snapshot`（默认首选）**：返回结构化文本骨架，token 便宜，交互必需；
 - **`browser_screenshot`**：给多模态 Agent 看视觉细节（布局、验证码、图表），返回 PNG/JPEG 图片内容；非活跃标签页会先自动切换到前台再截；
-- **`browser_evaluate`**：抽取骨架表达不了的精确数据，如 `() => JSON.parse(document.querySelector('#__NEXT_DATA__').textContent)`。默认在隔离世界执行，`world: "MAIN"` 可访问页面自己的 `window`。
+- **`browser_evaluate`**：抽取骨架表达不了的精确数据，如 `() => JSON.parse(document.querySelector('#__NEXT_DATA__').textContent)`。在页面上下文（MAIN world）执行，受页面 CSP 约束；`world: "ISOLATED"` 因 MV3 扩展 CSP 禁 eval 不可用，调用会得到明确报错。
 
 ## 扩展端状态
 

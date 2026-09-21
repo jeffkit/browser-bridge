@@ -56,7 +56,7 @@ MCP 客户端 ── tools/call browser_click ──▶ McpServer(handler)
 | relay = gateway 的公网部署形态（serve 命令的超集） | 复用同一套 hub/工具/协议；差异只在多 token 注册表 + MCP 强制 Bearer + 槽位绑定 |
 | 扩展应用层心跳 20s | Chrome ≥116 下 WS 活动重置 SW idle timer，防 service worker 休眠断连 |
 | 导航等待轮询 readyState 而非 webNavigation | 免加权限；`load`/`domcontentloaded` 分别对应 `complete`/`≥interactive` |
-| `page.evaluate` 不经 content script | MAIN world 无法与 ISOLATED content script 通信，必须由 SW 直接 executeScript |
+| `page.evaluate` 不经 content script，动态 fn 经 MAIN world eval 还原 | MAIN world 无法与 ISOLATED content script 通信；MV3 扩展 CSP 禁 eval（SW 与 ISOLATED 均拦），仅 MAIN（页面 CSP 管辖）可执行动态源码 |
 | Firefox 用 browser.* 适配层 + 事件页 IIFE | Firefox 的 chrome.* 是回调风格、MV3 无 service_worker；同一源码经 api.ts 适配、构建期换 manifest 与打包格式 |
 
 ## 4. 错误码契约

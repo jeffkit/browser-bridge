@@ -171,7 +171,10 @@ async function pageCall(
   fail(resp.error?.code ?? "page_action_failed", resp.error?.message ?? "页面操作失败");
 }
 
-/** page.evaluate 不走 content script：SW 直接 executeScript，支持 MAIN world。 */
+/** page.evaluate 不走 content script：SW 直接 executeScript。
+ *  动态 fn 源码必须经 eval 还原，而 MV3 扩展 CSP 禁 eval（SW 与 ISOLATED world 均被拦），
+ *  因此默认注入 MAIN world（受页面 CSP 约束，多数页面允许）；显式 ISOLATED 会得到 CSP
+ *  EvalError，转为明确错误提示。错误在引导函数内捕获后回传，不依赖 executeScript 的 reject 行为。 */
 async function evaluate(p: {
   fn: string;
   args?: unknown[];
@@ -180,25 +183,28 @@ async function evaluate(p: {
 }): Promise<unknown> {
   const tab = await resolveTab(p.tabId);
   const tabId = tab.id as number;
-  let fn: (...args: unknown[]) => unknown;
-  try {
-    const parsed = new Function(`return (${p.fn})`)();
-    if (typeof parsed !== "function") throw new Error("fn 必须是函数表达式");
-    fn = parsed as (...args: unknown[]) => unknown;
-  } catch (err) {
-    fail("bad_params", `fn 非法：${msg(err)}`);
+  const bootstrap = (src: string, args: unknown[]): unknown => {
+    try {
+      return { __bbOk: true, value: (0, eval)(`(${src})`)(...args) };
+    } catch (err) {
+      return { __bbOk: false, error: String(err) };
+    }
+  };
+  const results = await api.scripting.executeScript({
+    target: { tabId },
+    world: p.world === "ISOLATED" ? "ISOLATED" : "MAIN",
+    func: bootstrap,
+    args: [p.fn, p.args ?? []] as [string, unknown[]],
+  });
+  const r = results[0]?.result as { __bbOk?: boolean; value?: unknown; error?: string } | undefined;
+  if (r && typeof r === "object" && "__bbOk" in r) {
+    if (r.__bbOk) return { value: r.value };
+    if (p.world === "ISOLATED") {
+      fail("evaluate_failed", `ISOLATED world 禁 eval（MV3 扩展 CSP）：${r.error}；browser_evaluate 仅支持 MAIN world，去掉 world 参数即可`);
+    }
+    fail("evaluate_failed", `页面脚本执行失败：${r.error}`);
   }
-  try {
-    const results = await api.scripting.executeScript({
-      target: { tabId },
-      world: p.world === "MAIN" ? "MAIN" : "ISOLATED",
-      func: fn,
-      args: (p.args ?? []) as never[],
-    });
-    return { value: results[0]?.result };
-  } catch (err) {
-    fail("evaluate_failed", `页面脚本执行失败：${msg(err)}`);
-  }
+  fail("evaluate_failed", "页面脚本未返回结果（页面可能不支持注入）");
 }
 
 // ---------- 分发 ----------

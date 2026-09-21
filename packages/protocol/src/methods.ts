@@ -171,7 +171,7 @@ export interface PageEvaluateParams {
   /** 函数源码字符串，如 "(x) => x * 2"；页面内执行，返回值需可 JSON 序列化 */
   fn: string;
   args?: unknown[];
-  /** 缺省 ISOLATED（隔离世界，更安全）；MAIN 可访问页面 window 变量 */
+  /** 缺省 MAIN（页面上下文，受页面 CSP 约束）；ISOLATED 因 MV3 扩展 CSP 禁 eval 不可用，会返回明确错误 */
   world?: "ISOLATED" | "MAIN";
   tabId?: number;
 }

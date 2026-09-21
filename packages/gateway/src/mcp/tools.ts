@@ -175,11 +175,11 @@ export const TOOLS: ToolDef[] = [
   {
     name: "browser_evaluate",
     description:
-      "在页面内执行 JS 函数（源码字符串），返回值需可 JSON 序列化。默认 ISOLATED 隔离世界；world:\"MAIN\" 可访问页面 window。受 --allow-url 限制的页面已按导航约束。",
+      "在页面内执行 JS 函数（源码字符串），返回值需可 JSON 序列化。在页面上下文（MAIN world）执行，受页面 CSP 约束；world:\"ISOLATED\" 因 MV3 扩展 CSP 禁 eval 不可用。受 --allow-url 限制的页面已按导航约束。",
     schema: {
       fn: z.string().describe('函数源码，如 "() => document.title"'),
       args: z.array(z.unknown()).optional().describe("传给函数的参数（可 JSON 序列化）"),
-      world: z.enum(["ISOLATED", "MAIN"]).optional(),
+      world: z.enum(["ISOLATED", "MAIN"]).optional().describe("仅 MAIN 可用（默认）；ISOLATED 受扩展 CSP 限制"),
       tabId: tabId.optional(),
     },
     handler: async (args, target) => call(target, "page.evaluate", args),

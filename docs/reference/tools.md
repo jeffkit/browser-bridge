@@ -73,7 +73,7 @@ gateway 暴露的全部工具。除标注外，`tabId` 均为可选参数，缺�
 |------|------|
 | `fn` | 函数源码字符串，如 `"() => document.title"` |
 | `args?` | 传给函数的参数，必须可 JSON 序列化 |
-| `world?` | `ISOLATED`（默认，隔离世界）/ `MAIN`（页面自己的 window） |
+| `world?` | 仅 `MAIN` 可用（默认，页面上下文）；`ISOLATED` 因 MV3 扩展 CSP 禁 eval 不可用 |
 | `tabId?` | — |
 
 返回 `{ value: <函数返回值> }`。返回值需可 JSON 序列化（DOM 节点不行，先转字符串）。
