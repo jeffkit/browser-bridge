@@ -16,7 +16,8 @@ Agent 跑在远程机器上，经标准 MCP 连本仓 gateway；gateway 经出�
 packages/protocol    线协议（消息/方法/错误码/browserId 规则，双方共享，零依赖）
 packages/gateway     browser-bridge-gateway：WS server（多浏览器路由）+ MCP（streamable HTTP / stdio）+ CLI（serve/mcp/relay/token）
 packages/extension   浏览器扩展：service worker（连接/路由）+ content script（快照/交互）+ popup/options；api.ts 适配 Chromium/Firefox，双产物构建
-scripts/smoke.mjs    端到端冒烟（双浏览器路由）
+scripts/smoke.mjs    端到端冒烟（假扩展，双浏览器路由）
+scripts/e2e.mjs      真实浏览器 E2E（Playwright Chromium 加载扩展：导航/快照/填表/点击/按键/滚动/evaluate/截图/标签页/失效引用）
 ```
 
 依赖方向：`gateway → protocol`、`extension → protocol`，两包互不依赖。
@@ -47,7 +48,8 @@ pnpm install
 pnpm build                      # protocol → gateway → extension（Chromium + Firefox 双产物）
 pnpm test                       # gateway 测试（自动先 build）
 pnpm typecheck
-pnpm smoke                      # 端到端冒烟
+pnpm smoke                      # 端到端冒烟（假扩展，秒级）
+pnpm e2e                        # 真实浏览器 E2E：Playwright Chromium 加载扩展全链路（headed；CI 用 xvfb-run）
 pnpm package                    # 打包扩展 zip → dist-release/（Release 用）
 npx browser-bridge-gateway serve --token <t>   # 直连模式
 npx browser-bridge-gateway relay --token a --token b   # 公网中转模式
@@ -63,7 +65,7 @@ npx browser-bridge-gateway relay --token a --token b   # 公网中转模式
 
 ## 当前状态
 
-v0.2：协议 15 方法 + browserId 多浏览器路由；MCP 14 工具、三部署形态（serve / mcp / relay）；扩展 Chromium + Firefox 双产物；gateway 测试 18 项 + 端到端冒烟（含双浏览器）全绿；扩展 zip 与 npm 包由 tag 触发自动发布（npm 需 NPM_TOKEN）。未实现：扩展自动化 E2E。
+v0.3+：协议 15 方法 + browserId 多浏览器路由；MCP 14 工具、三部署形态（serve / mcp / relay）+ gateway call 子命令与 AI Skill；扩展 Chromium + Firefox 双产物；gateway 测试 21 项 + 冒烟 + 真实浏览器 E2E（Playwright 加载扩展）全绿；CI（unit + e2e）；扩展 zip 与 npm 包由 tag 触发自动发布。已知限制：browser_evaluate 仅支持 MAIN world（MV3 扩展 CSP 禁 eval，ISOLATED 显式报错）。
 
 ## 深入阅读
 

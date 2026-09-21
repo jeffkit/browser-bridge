@@ -409,25 +409,28 @@
   async function evaluate(p) {
     const tab = await resolveTab(p.tabId);
     const tabId = tab.id;
-    let fn;
-    try {
-      const parsed = new Function(`return (${p.fn})`)();
-      if (typeof parsed !== "function") throw new Error("fn \u5FC5\u987B\u662F\u51FD\u6570\u8868\u8FBE\u5F0F");
-      fn = parsed;
-    } catch (err) {
-      fail("bad_params", `fn \u975E\u6CD5\uFF1A${msg(err)}`);
+    const bootstrap = (src, args) => {
+      try {
+        return { __bbOk: true, value: (0, eval)(`(${src})`)(...args) };
+      } catch (err) {
+        return { __bbOk: false, error: String(err) };
+      }
+    };
+    const results = await api.scripting.executeScript({
+      target: { tabId },
+      world: p.world === "ISOLATED" ? "ISOLATED" : "MAIN",
+      func: bootstrap,
+      args: [p.fn, p.args ?? []]
+    });
+    const r = results[0]?.result;
+    if (r && typeof r === "object" && "__bbOk" in r) {
+      if (r.__bbOk) return { value: r.value };
+      if (p.world === "ISOLATED") {
+        fail("evaluate_failed", `ISOLATED world \u7981 eval\uFF08MV3 \u6269\u5C55 CSP\uFF09\uFF1A${r.error}\uFF1Bbrowser_evaluate \u4EC5\u652F\u6301 MAIN world\uFF0C\u53BB\u6389 world \u53C2\u6570\u5373\u53EF`);
+      }
+      fail("evaluate_failed", `\u9875\u9762\u811A\u672C\u6267\u884C\u5931\u8D25\uFF1A${r.error}`);
     }
-    try {
-      const results = await api.scripting.executeScript({
-        target: { tabId },
-        world: p.world === "MAIN" ? "MAIN" : "ISOLATED",
-        func: fn,
-        args: p.args ?? []
-      });
-      return { value: results[0]?.result };
-    } catch (err) {
-      fail("evaluate_failed", `\u9875\u9762\u811A\u672C\u6267\u884C\u5931\u8D25\uFF1A${msg(err)}`);
-    }
+    fail("evaluate_failed", "\u9875\u9762\u811A\u672C\u672A\u8FD4\u56DE\u7ED3\u679C\uFF08\u9875\u9762\u53EF\u80FD\u4E0D\u652F\u6301\u6CE8\u5165\uFF09");
   }
   async function dispatch(method, rawParams) {
     const params = rawParams ?? {};

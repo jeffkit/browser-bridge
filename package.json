@@ -9,9 +9,13 @@
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "smoke": "node scripts/smoke.mjs",
+    "e2e": "pnpm build && node scripts/e2e.mjs",
     "package": "pnpm build && node scripts/package.mjs"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
   }
 }
