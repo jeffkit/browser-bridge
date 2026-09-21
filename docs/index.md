@@ -31,7 +31,7 @@ features:
     details: 握手 token 不匹配即断连；--allow-url 正则限制 Agent 可导航的站点；传输加密交给 wss / Tailscale。
   - title: ""
     icon: 📸
-    details: 截图直接以图片内容返回给多模态 Agent，页面执行 JS 支持 ISOLATED 与 MAIN 两个世界。
+    details: 截图直接以图片内容返回给多模态 Agent，页面执行 JS（MAIN world）可抽取任意页面数据。
   - icon: 🧩
     title: 与 web-bridge 同心智
     details: "协议形状与 web-bridge 一致（{id, method, params} + @eN）——web-bridge 操控桌面 WebView，browser-bridge 操控真实浏览器。"
