@@ -21,10 +21,10 @@ git clone https://github.com/jeffkit/browser-bridge.git && cd browser-bridge
 pnpm install && pnpm build
 
 node packages/gateway/dist/cli.js relay \
-  --token <浏览器A的token> --token <浏览器B的token> --token <agent用的token>
+  --token <浏览器A的token> --token <浏览器B的token>
 ```
 
-`--token` 可重复，形成 token 注册表。**公网部署必须前置 TLS**（caddy 一行配置即可，见下），明文 `ws://` 等于把浏览器操控权暴露给链路窃听者：
+`--token` 可重复，形成 token 注册表——**语义是「每台浏览器一个 token」**：扩展用它握手，Agent 控制这台浏览器时 Bearer 也用它（见下方鉴权规则）。**公网部署必须前置 TLS**（caddy 一行配置即可，见下），明文 `ws://` 等于把浏览器操控权暴露给链路窃听者：
 
 ```nginx
 # caddy 示例
@@ -70,7 +70,7 @@ Agent 连 relay 的 MCP 端点，**路径即浏览器 ID**，并带 Bearer：
 
 1. **扩展侧**：hello token 必须在注册表内（不在即断开）；
 2. **Agent 侧**：每个 MCP 请求都要 `Authorization: Bearer <token>`，缺省或不在注册表内 → 401；
-3. **槽位绑定**：浏览器「laptop」一旦在线，操控它的 Bearer 必须是它握手用的那个 token——**别的注册表 token 无法操控你的浏览器**；浏览器离线时，注册表内任意合法 token 可先建 MCP 会话（真连上浏览器仍需匹配）。
+3. **槽位绑定**：浏览器「laptop」一旦在线，操控它的 Bearer 必须是它握手用的那个 token——**Agent 要控制哪台浏览器，就带那台浏览器的 token**；该浏览器离线时，注册表内任意合法 token 可先建 MCP 会话（真连上浏览器仍需匹配）。
 
 ::: warning relay 是信任边界
 relay 服务器运营者技术上可见全部经过的指令与页面数据。用自己的 VPS、保管好 token；不要连不受信任的第三方 relay。
