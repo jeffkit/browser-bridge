@@ -78,7 +78,9 @@ console.log(`✓ gateway 已启动 :${port}`);
 
 // ---------- 启动真实浏览器并加载扩展 ----------
 const userDataDir = mkdtempSync(join(tmpdir(), "bb-e2e-"));
-const launchArgs = [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`, "--no-first-run", "--no-default-browser-check"];
+// Linux（xvfb 无 GPU）用 swiftshader 软渲染，否则 captureVisibleTab 报 image readback failed
+const platformArgs = process.platform === "linux" ? ["--use-angle=swiftshader"] : [];
+const launchArgs = [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`, "--no-first-run", "--no-default-browser-check", ...platformArgs];
 // 渠道顺序：默认 Playwright Chromium（品牌版 Chrome 137+ 已移除 --load-extension，不可用），
 // 回退本机 Chrome / 默认构建；BB_E2E_CHANNEL 可强制指定
 let context = null;

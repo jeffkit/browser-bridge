@@ -16,8 +16,9 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
+      # build 在前：extension typecheck 依赖 protocol 的 dist 类型产物
       - run: pnpm build
+      - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm smoke
 
