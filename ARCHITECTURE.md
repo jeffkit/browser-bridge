@@ -1,6 +1,6 @@
 # browser-bridge 架构
 
-> 最后更新：2026-09-09（v0.2：多浏览器会话、公网 relay、Firefox 支持）
+> 最后更新：2026-09-09（当前 0.3.2：多浏览器会话、公网 relay、Firefox 支持）
 
 ## 1. 组件
 
@@ -84,7 +84,7 @@ gateway hello 通过 ── WS allowlist{patterns} ──▶ 扩展 navGuard（o
 
 线协议版本：`PROTOCOL_VERSION`（protocol/messages.ts）v2 = `allowlist`（gateway→扩展，导航兜底允许列表）+ `nav_blocked`（扩展→gateway，拦截上报）。改协议必须升版本号：hello 会拒旧客户端（fail-closed）。
 
-## 5. 部署形态（原「扩展点」，v0.2 已实现）
+## 5. 部署形态（原「扩展点」，现已实现）
 
 | 形态 | 命令 | 场景 |
 |------|------|------|

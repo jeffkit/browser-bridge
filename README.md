@@ -5,7 +5,7 @@
 
 **📖 文档站：<https://jeffkit.github.io/browser-bridge/>**（安装 / 配置 / 中转部署 / 使用 / 安全 / FAQ 完整指南）
 
-v0.2 能力：远程 Agent 经标准 MCP 操控本地真实浏览器；**多浏览器会话**（`browserId` 路由，`/mcp/<浏览器ID>` 指定目标）；**公网 relay 模式**（双方都在 NAT 后时中转，多 token 注册表 + MCP 强制 Bearer）；**Firefox 支持**（与 Chromium 版同源构建）。
+v0.3+ 能力（当前 0.3.2）：远程 Agent 经标准 MCP 操控本地真实浏览器；**多浏览器会话**（`browserId` 路由，`/mcp/<浏览器ID>` 指定目标）；**公网 relay 模式**（双方都在 NAT 后时中转，多 token 注册表 + MCP 强制 Bearer）；**Firefox 支持**（与 Chromium 版同源构建）。
 
 与 [web-bridge](https://github.com/jeffkit/web-bridge) 呼应成对：web-bridge 注入操控桌面应用 WebView；browser-bridge 操控真实浏览器。协议形状一致（`{id, method, params}` 请求 / `{id, ok, result|error}` 应答），`@eN` 元素引用心智相同。
 
@@ -143,7 +143,7 @@ pnpm install && pnpm build
 ```bash
 pnpm install
 pnpm build            # protocol(tsc) → gateway(tsc) → extension(esbuild)
-pnpm test             # gateway 13 项单测/集成测（先 build）
+pnpm test             # gateway 21 项单测/集成测（先 build）
 pnpm typecheck        # 三包类型检查
 node scripts/smoke.mjs  # 端到端冒烟：gateway serve + 假扩展 + MCP HTTP 全链路
 pnpm --filter @browser-bridge/docs dev   # 文档站本地预览（localhost:5173）
@@ -158,7 +158,7 @@ pnpm --filter @browser-bridge/docs dev   # 文档站本地预览（localhost:517
 | 路径 | 说明 |
 |------|------|
 | `packages/protocol` | 线协议：消息、方法常量、错误码、参数/结果类型 |
-| `packages/gateway` | `browser-bridge-gateway` npm 包：WS server（多浏览器路由）+ MCP 双入口 + CLI（serve/mcp/relay/token） |
+| `packages/gateway` | `browser-bridge-gateway` npm 包：WS server（多浏览器路由）+ MCP 双入口 + CLI（serve/mcp/relay/token/call；`call` 直接对 gateway HTTP 面发起单次工具调用，支持 `--url`/`--bearer`/`--save-image`，实现见 `src/cli.ts`） |
 | `packages/extension` | 浏览器扩展：service worker / content script / popup / options（browser.* 适配层同源构建 Chromium + Firefox） |
 | `skill/` | ZCode/AI Skill：教 Agent 用 `gateway call` 按需操控浏览器（免常驻 MCP 配置），拷贝到 `~/.agents/skills/browser-bridge/` 即装 |
 | `scripts/smoke.mjs` | 端到端冒烟脚本（含双浏览器路由验证） |
