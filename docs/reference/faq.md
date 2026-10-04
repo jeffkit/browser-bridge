@@ -69,7 +69,7 @@ bridge 已按受控组件方式派发 `input`/`change` 事件；若仍无效，�
 
 ### relay 返回 401
 
-MCP 请求缺 `Authorization: Bearer <token>` 或 token 不在 relay 注册表内。另外注意：**浏览器在线时，Bearer 必须是它握手用的那个 token**——用 A 的 token 去连 B 浏览器的 `/mcp/<id>` 会被拒。
+MCP 请求缺 `Authorization: Bearer <token>`，或 token 不是所用 `/mcp/<id>` 那台浏览器绑定的 token。注意：**relay 全程按 `<browserId>=<token>` 绑定，浏览器离线时 Bearer 也必须等于该浏览器绑定的 token**——用 A 的 token 去连 B 浏览器的 `/mcp/<id>` 会被拒。
 
 ### 连错浏览器（多浏览器场景）
 

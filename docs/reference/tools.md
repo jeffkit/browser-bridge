@@ -21,7 +21,7 @@ gateway 暴露的全部工具。除标注外，`tabId` 均为可选参数，缺�
 - `permission`：当前生效的权限档；
 - `allowForeignTabs`：是否允许操作非本会话创建的标签页；
 - `navBlocked`：扩展上报的导航兜底拦截记录（最多 20 条，`{ tabId, url, from?, code, at }`）——点链接 / 表单提交 / JS 跳转越界时在这里可见；
-- `browsers`：在线浏览器列表（多浏览器 / relay 场景用它确认设备名）。本工具绑定哪个浏览器由接入 URL 决定：`/mcp` → default，`/mcp/<浏览器ID>` → 对应设备。
+- `browsers`：在线浏览器列表（多浏览器 / relay 场景用它确认设备名；relay 模式下只含本 token 绑定的浏览器）。本工具绑定哪个浏览器由接入 URL 决定：`/mcp` → default，`/mcp/<浏览器ID>` → 对应设备。
 
 ## 标签页
 

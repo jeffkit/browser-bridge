@@ -12,6 +12,7 @@ import {
   GATEWAY_VERSION,
   generateToken,
   parseAllowUrls,
+  parseBrowserTokens,
   PermissionTiers,
   resolvePermission,
   type GatewayConfig,
@@ -96,33 +97,31 @@ async function runMcp(o: CommonOpts): Promise<void> {
 
 /**
  * relay 公网中转：扩展与 agent 都出站连接本服务（双方都无需公网地址）。
- * 与 serve 的差别：多 token 注册表 + MCP 强制 Bearer 鉴权，面向公网部署。
+ * 与 serve 的差别：`--token <browserId>=<token>` 映射 + MCP 强制 Bearer 鉴权（按槽位归属），面向公网部署。
  */
 async function runRelay(o: CommonOpts): Promise<void> {
   const config = buildConfig(o);
-  ensureTokens(config);
+  // relay 必须显式给绑定；解析后注册表即绑定值集合（非法/为空直接抛 → 启动失败）
+  config.browserTokens = parseBrowserTokens(config.allowedTokens);
+  config.allowedTokens = [...config.browserTokens.values()];
   logPolicy(config);
-  const registry = new Set(config.allowedTokens);
-  log(`token 注册表：${registry.size} 个（扩展与 agent 的 Bearer 均须来自其中）`);
+  log(
+    `token 绑定：${config.browserTokens.size} 个（形式 browserId=token；扩展与 agent 的 Bearer 均须与该 browserId 的绑定值一致）`,
+  );
 
-  // 已连接的浏览器槽位：Bearer 必须等于该浏览器的配对 token，防止跨用户操控；
-  // 浏览器离线时：Bearer 是注册表内任一合法 token 即可（后续连接仍受 hello token 约束）
-  const authenticate = (req: IncomingMessage, browserId: string): boolean => {
-    const bearer = bearerToken(req);
-    if (!bearer || !registry.has(bearer)) return false;
-    const session = hub.getSession(browserId);
-    return session ? bearer === session.token : true;
-  };
+  const authenticate = (req: IncomingMessage, browserId: string): boolean =>
+    hub.authAllows(browserId, bearerToken(req));
 
-  const httpHandler = createStreamableHttpHandler((browserId) => createMcpServer(hub, browserId), {
-    authenticate,
-  });
+  const httpHandler = createStreamableHttpHandler(
+    (browserId, callerToken) => createMcpServer(hub, browserId, callerToken),
+    { authenticate },
+  );
   const hub = new BrowserHub({ config, log, httpHandler });
   await hub.start();
   const { port } = hub.address;
-  log(`relay MCP 端点：http://${config.host}:${port}/mcp/<浏览器ID>，请求头 Authorization: Bearer <token>`);
+  log(`relay MCP 端点：http://${config.host}:${port}/mcp/<浏览器ID>，请求头 Authorization: Bearer <该浏览器绑定的 token>`);
   log(`健康检查：http://${config.host}:${port}/healthz`);
-  log("扩展 options 里填本 relay 地址 + 注册表内 token + 各自的浏览器 ID；公网部署请前置 TLS（wss）");
+  log("扩展 options 里填本 relay 地址 + 该浏览器绑定的 token + 对应浏览器 ID；公网部署请前置 TLS（wss）");
 }
 
 async function runToken(): Promise<void> {
@@ -191,7 +190,7 @@ export function runCli(argv: string[]): void {
     cmd
       .option("-p, --port <n>", "监听端口，0 为随机", "17833")
       .option("--host <h>", "监听地址", "0.0.0.0")
-      .option("--token <t>", "扩展握手 token（可多次；也可用环境变量 BROWSER_BRIDGE_TOKEN）", (v: string, prev: string[]) => [...prev, v], [] as string[])
+      .option("--token <t>", "扩展握手 token（可多次；relay 必须为 <browserId>=<token>；也可用环境变量 BROWSER_BRIDGE_TOKEN）", (v: string, prev: string[]) => [...prev, v], [] as string[])
       .option("--allow-url <regex>", "URL 允许列表正则，可多次提供；缺省不限制。同时下发扩展做导航兜底", (v: string, prev: string[]) => [...prev, v], [] as string[])
       .option("--permission <tier>", `动作面权限档：${PermissionTiers.join(" | ")}（默认最窄，越高越危险）`, "read-only")
       .option("--allow-foreign-tabs", "允许操作/列出非本会话创建的既有标签页（默认拒绝）", false);
@@ -217,7 +216,7 @@ export function runCli(argv: string[]): void {
   commonOptions(
     program
       .command("relay")
-      .description("公网中转模式：扩展与 agent 都出站连接本服务；多 token + MCP 强制 Bearer 鉴权"),
+      .description("公网中转模式：扩展与 agent 都出站连接本服务；relay 需 --token <browserId>=<token> + MCP 强制 Bearer 鉴权"),
   ).action(async (opts: CommonOpts) => {
     await runRelay(opts);
   });

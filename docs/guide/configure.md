@@ -23,7 +23,7 @@ npx browser-bridge-gateway@latest serve --token s3cr3t-token
 |------|------|------|
 | `-p, --port <n>` | `17833` | 监听端口，`0` 为随机 |
 | `--host <h>` | `0.0.0.0` | 监听地址 |
-| `--token <t>` | 环境变量 `BROWSER_BRIDGE_TOKEN`，都没有则随机生成并打印 | 扩展握手 token；**可重复提供**（relay 注册表） |
+| `--token <t>` | 环境变量 `BROWSER_BRIDGE_TOKEN`，都没有则随机生成并打印 | 扩展握手 token；**可重复提供**（relay 必须为 `<browserId>=<token>`，格式或唯一性非法则启动失败） |
 | `--permission <tier>` | `read-only`（最窄档） | 动作面权限档：`read-only` / `navigate-allowlist` / `full`（详见[安全](/guide/security)）。取值非法直接启动失败，不静默回退 |
 | `--allow-foreign-tabs` | 关闭 | 允许操作/列出非本会话创建的既有标签页；缺省只允许本会话 navigate/create 过的 tab |
 | `--allow-url <regex>` | 不限制 | URL 允许列表正则，**可多次提供**。既校验 `navigate`/`tab_open` 入参，也下发给扩展做导航兜底（点链接/表单/JS 跳转越界会被回退并上报） |

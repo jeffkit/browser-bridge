@@ -19,10 +19,15 @@ function isCallToolResult(value: unknown): value is CallToolResult {
  * 装配一个注册好全部 browser_* 工具的 McpServer，绑定到指定浏览器。
  * - stdio 入口：browserId = default
  * - streamable HTTP：按 /mcp/:browserId 路径绑定；每个 MCP 会话一个实例，共享同一 hub
+ * - token：调用方身份（relay 下为请求 Bearer）；缺省 = 无身份
  */
-export function createMcpServer(hub: BrowserHub, browserId: string = DEFAULT_BROWSER_ID): McpServer {
+export function createMcpServer(
+  hub: BrowserHub,
+  browserId: string = DEFAULT_BROWSER_ID,
+  token?: string,
+): McpServer {
   const server = new McpServer({ name: MCP_SERVER_NAME, version: GATEWAY_VERSION });
-  const target = { hub, browserId };
+  const target = { hub, browserId, token };
   for (const def of TOOLS) {
     server.tool(def.name, def.description, def.schema, async (args: Record<string, unknown>): Promise<CallToolResult> => {
       try {

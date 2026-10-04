@@ -32,13 +32,20 @@ export function bearerToken(req: IncomingMessage): string | null {
   return m ? (m[1] ?? null) : null;
 }
 
+/** 401 响应（首次鉴权与 body 读完后二次鉴权共用）。 */
+function unauthorized(res: ServerResponse): void {
+  res
+    .writeHead(401, { "content-type": "application/json", "www-authenticate": "Bearer" })
+    .end(JSON.stringify({ error: "unauthorized: missing or invalid bearer token" }));
+}
+
 /**
  * MCP streamable HTTP 入口（stateful：每会话一个 server+transport）。
  * - 路径 /mcp → default 浏览器；/mcp/:browserId → 绑定对应浏览器（工具面相同）
  * - POST 无会话头 → 必须是 initialize；POST/GET/DELETE 带会话头 → 路由到既有会话
  */
 export function createStreamableHttpHandler(
-  newServer: (browserId: string) => McpServer,
+  newServer: (browserId: string, callerToken?: string) => McpServer,
   opts: StreamableHttpOptions = {},
 ): HttpHandler {
   const sessions = new Map<string, McpHttpSession>();
@@ -61,11 +68,11 @@ export function createStreamableHttpHandler(
       return;
     }
     if (opts.authenticate && !opts.authenticate(req, browserId)) {
-      res
-        .writeHead(401, { "content-type": "application/json", "www-authenticate": "Bearer" })
-        .end(JSON.stringify({ error: "unauthorized: missing or invalid bearer token" }));
+      unauthorized(res);
       return;
     }
+    // 调用方身份（relay 角色）：无 authenticate（serve/stdio）即无身份 → browser_status 返回全量
+    const callerToken = opts.authenticate ? (bearerToken(req) ?? undefined) : undefined;
 
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
     const existing = sessionId ? sessions.get(sessionId) : undefined;
@@ -76,6 +83,11 @@ export function createStreamableHttpHandler(
 
     if (req.method === "POST") {
       const body = await readJsonBody(req);
+      // 读 body 期间槽位可能已被他人占用：dispatch 前按请求 token 重验一次归属
+      if (opts.authenticate && !opts.authenticate(req, browserId)) {
+        unauthorized(res);
+        return;
+      }
       if (existing) {
         await existing.transport.handleRequest(req, res, body);
         return;
@@ -91,7 +103,7 @@ export function createStreamableHttpHandler(
         transport.onclose = () => {
           if (transport.sessionId) sessions.delete(transport.sessionId);
         };
-        session = { server: newServer(browserId), transport };
+        session = { server: newServer(browserId, callerToken), transport };
         await session.server.connect(transport);
         await transport.handleRequest(req, res, body);
         return;

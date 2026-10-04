@@ -112,10 +112,10 @@ pnpm install && pnpm build
 
 ## 安全模型
 
-- **token 鉴权**：扩展 hello 握手携带，不匹配即断（WS close 4003）。`relay` 模式支持多 token 注册表，且 MCP 每请求强制 `Authorization: Bearer`。
+- **token 鉴权**：扩展 hello 握手携带，不匹配即断（WS close 4003）。`relay` 模式支持多浏览器绑定（token 形如 `<browserId>=<token>`），且 MCP 每请求强制 `Authorization: Bearer`，槽位与 Bearer 均按此绑定（含离线）。
 - **动作面权限档**：`--permission read-only|navigate-allowlist|full`（默认 `read-only`，最窄）。档位不足返回 `permission_denied`；非法取值直接启动失败，不静默回退。
 - **会话归属（owner）**：默认只能读写本会话创建/导航过的标签页，非 owner 的 `tabId` 返回 `tab_not_owned`，`browser_tab_list` 只列 owner（附 `hiddenNonOwned` 计数）；确需操作既有标签页用 `--allow-foreign-tabs`。
-- **多浏览器会话**：扩展以 `browserId` 标识设备，同一 gateway/relay 可并存多台浏览器；MCP 经 `/mcp/<浏览器ID>` 绑定目标。已在线的浏览器槽位只认其配对 token。
+- **多浏览器会话**：扩展以 `browserId` 标识设备，同一 gateway/relay 可并存多台浏览器；MCP 经 `/mcp/<浏览器ID>` 绑定目标。同一槽位只有持同一 token 的连接才能顶替。
 - **传输加密**：gateway 不做 TLS 终结。公网部署请前置 caddy/nginx 提供 `wss://`，或走 Tailscale 等加密网络；`ws://` 仅限可信内网。
 - **URL 允许列表**（可选）：`--allow-url <regex>`（可多次）既校验 `navigate`/`tab_open` 的入参，也下发给扩展做**导航兜底**——点链接/表单提交/JS 跳转越界会被回退并上报 `url_not_allowed`（见 `browser_status.navBlocked`）。缺省不限制；兜底仅作用于 gateway 驱动过的 tab、且仅连接期间生效。
 - **页面内容不可信**：`browser_snapshot` 的 `text` 用 `<untrusted-page-content>` 界出且结果带 `untrusted: true`；`browser_evaluate` 结果同样带 `untrusted: true`——页面里的「指令」不得当作 Agent 指令。
