@@ -1,5 +1,6 @@
 import { api } from "../common/api.js";
 import { type TabInfo, type WaitFor } from "@browser-bridge/protocol";
+import { navGuard } from "./nav-guard.js";
 
 /** 带错误码的业务失败（Connection 会转成 result.error）。 */
 function fail(code: string, message: string): never {
@@ -50,6 +51,9 @@ async function navigate(p: {
   const tab = await resolveTab(p.tabId);
   const tabId = tab.id as number;
   await api.tabs.update(tabId, { url: p.url });
+  // gateway 校验过目标 URL：该 tab 归本会话（owned），且作为后续越界导航的回退目标
+  navGuard.trackOwnedTab(tabId);
+  navGuard.noteAllowedUrl(tabId, p.url);
 
   const waitFor = p.waitFor ?? "load";
   if (waitFor === "none") {
@@ -225,6 +229,11 @@ export async function dispatch(method: string, rawParams: unknown): Promise<unkn
         url: params.url as string | undefined,
         active: (params.active as boolean | undefined) ?? true,
       });
+      const createdId = tab.id;
+      if (typeof createdId === "number") {
+        navGuard.trackOwnedTab(createdId);
+        navGuard.noteAllowedUrl(createdId, params.url as string | undefined);
+      }
       return { tab: tabInfo(tab) };
     }
     case "tabs.close":

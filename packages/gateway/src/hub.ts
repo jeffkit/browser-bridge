@@ -11,7 +11,7 @@ import {
   PROTOCOL_VERSION,
 } from "@browser-bridge/protocol";
 import { BrowserSession, newSessionId, type SessionClientInfo } from "./session.js";
-import type { GatewayConfig } from "./config.js";
+import { resolvePermission, type GatewayConfig, type Permission } from "./config.js";
 
 export type HttpHandler = (req: IncomingMessage, res: ServerResponse) => void | Promise<void>;
 
@@ -32,7 +32,8 @@ export interface ConnectedBrowser {
  * - WS server（根路径）承载扩展出站连接，hello+token 鉴权
  * - 多浏览器：按 hello.browserId 分流；同 browserId 同 token 新连接顶替旧连接，不同 browserId 并存
  * - 同一 HTTP server 挂 /healthz 与 MCP streamable HTTP（经 httpHandler）
- * - checkUrl 提供 --allow-url 允许列表校验
+ * - checkUrl 提供 --allow-url 允许列表校验；hello 通过后把允许列表下发给扩展做导航兜底
+ * - permission / allowForeignTabs 供工具面做档位与 owner 门禁（见 mcp/tools.ts）
  */
 export class BrowserHub {
   private httpServer: Server;
@@ -121,6 +122,16 @@ export class BrowserHub {
     return this.opts.config.allowUrls.length;
   }
 
+  /** 生效的动作面权限档（缺省最窄 read-only）。 */
+  get permission(): Permission {
+    return resolvePermission(this.opts.config);
+  }
+
+  /** 是否允许操作/列出非本会话创建的既有标签页。 */
+  get allowForeignTabs(): boolean {
+    return this.opts.config.allowForeignTabs === true;
+  }
+
   requireUrlAllowed(url: string): void {
     if (!this.checkUrl(url)) {
       throw bridgeError(
@@ -198,6 +209,9 @@ export class BrowserHub {
       this.log(`浏览器「${browserId}」已连接 ${session.id}（${client.name} v${client.version}）`);
     }
     this.sessions.set(browserId, session);
+
+    // 导航兜底：允许列表交给扩展，由扩展在 tabs.onUpdated 上拦截越界跳转（每次连接都重发）
+    session.send({ type: "allowlist", patterns: this.opts.config.allowUrls.map((re) => re.source) });
 
     ws.on("message", (data) => {
       const msg = parseWireMessage(String(data));

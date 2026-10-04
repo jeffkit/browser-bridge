@@ -19,6 +19,18 @@ Chrome < 116 的 service worker 休眠策略不同，请升级到 Chrome/Edge �
 
 ## 页面操作问题
 
+### `permission_denied`
+
+gateway 的权限档不够。默认档 `read-only` 只放行 status/tab_list/snapshot/screenshot/scroll——要导航/点击/填表加 `--permission navigate-allowlist`，要 `browser_evaluate` 加到 `--permission full`；改完重启 gateway（扩展会自动重连）。`browser_status` 的 `permission` 字段可确认当前档。
+
+### `tab_not_owned`
+
+传入的 `tabId` 不是本会话创建或导航过的标签页（默认拒绝对浏览器里既有标签页的读写）。两条路：先 `browser_navigate` 到目标站点让该 tab 归本会话；或给 gateway 加 `--allow-foreign-tabs` 显式放开。列表被过滤时 `browser_tab_list` 的 `hiddenNonOwned` 会提示存在被隐藏的标签页。
+
+### `url_not_allowed`（点完链接后出现）
+
+gateway 配了 `--allow-url` 允许列表。除了工具入参，扩展还会在导航实际发生时兜底：点链接/表单提交/JS 跳转越界会被回退到上一个允许的页面，并在 `browser_status` 的 `navBlocked` 里留下记录。把目标站加进允许列表，或换允许内的站点。
+
 ### `stale_ref` 频繁出现
 
 正常现象：页面跳转/刷新后 `@eN` 引用全部重编。重新 `browser_snapshot` 再操作。单页应用（SPA）内切换若不触发导航，引用仍然有效。
@@ -29,7 +41,7 @@ Chrome < 116 的 service worker 休眠策略不同，请升级到 Chrome/Edge �
 
 ### 点击没反应
 
-部分站点校验事件 `isTrusted`（合成点击为 false）或有人机验证。可尝试：先 `browser_snapshot` 确认元素仍存在 → 直接点按钮元素而非外层容器 → 绕过 UI 用 `browser_evaluate` 调页面接口。
+部分站点校验事件 `isTrusted`（合成点击为 false）或有人机验证。可尝试：先 `browser_snapshot` 确认元素仍存在 → 直接点按钮元素而非外层容器 → 绕过 UI 用 `browser_evaluate` 调页面接口（需 gateway 以 `--permission full` 启动，且 click 本身也需 `navigate-allowlist` 档）。
 
 ### `browser_fill` 后 React/Vue 表单没反应
 

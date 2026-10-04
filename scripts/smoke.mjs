@@ -1,6 +1,6 @@
 /**
  * 端到端冒烟：起 gateway serve 进程 → 假扩展 WS 接入 → 经 MCP streamable HTTP
- * 调 browser_status / browser_tab_list / browser_navigate（--allow-url 拦截）。
+ * 调 browser_status / browser_tab_list / browser_navigate（--allow-url 拦截）/ browser_evaluate（档位拦截）。
  *
  * 前置：pnpm build（需要 packages/gateway/dist）。
  * 运行：node scripts/smoke.mjs
@@ -11,9 +11,29 @@ import { setTimeout as sleep } from "node:timers/promises";
 const TOKEN = "smoke-token";
 const CLI = new URL("../packages/gateway/dist/cli.js", import.meta.url).pathname;
 
-const child = spawn(process.execPath, [CLI, "serve", "--port", "0", "--host", "127.0.0.1", "--token", TOKEN, "--allow-url", "^https://example\\.com/"], {
-  stdio: ["ignore", "ignore", "pipe"],
-});
+// 档位取 navigate-allowlist：既有断言（navigate/tab_list）语义不变，另验证 evaluate 被档位拒；
+// allow-foreign-tabs：本冒烟用假扩展，不涉及 owner 语义
+const child = spawn(
+  process.execPath,
+  [
+    CLI,
+    "serve",
+    "--port",
+    "0",
+    "--host",
+    "127.0.0.1",
+    "--token",
+    TOKEN,
+    "--allow-url",
+    "^https://example\\.com/",
+    "--permission",
+    "navigate-allowlist",
+    "--allow-foreign-tabs",
+  ],
+  {
+    stdio: ["ignore", "ignore", "pipe"],
+  },
+);
 let stderr = "";
 child.stderr.on("data", (c) => {
   stderr += c.toString();
@@ -41,7 +61,7 @@ ws.addEventListener("open", () => {
   ws.send(
     JSON.stringify({
       type: "hello",
-      proto: 1,
+      proto: 2,
       auth: TOKEN,
       client: { name: "fake-extension", version: "0.2.0" },
     }),
@@ -79,7 +99,7 @@ wsLaptop.addEventListener("open", () => {
   wsLaptop.send(
     JSON.stringify({
       type: "hello",
-      proto: 1,
+      proto: 2,
       auth: TOKEN,
       client: { name: "fake-extension", version: "0.2.0" },
       browserId: "laptop",
@@ -159,6 +179,12 @@ console.log("✓ browser_navigate：allow-url 内放行");
 const blocked = await call("browser_navigate", { url: "https://evil.example.org/" }, 5);
 if (!blocked.isError || !blocked.text.includes("url_not_allowed")) fail(`allow-url 拦截失效：${blocked.text}`);
 console.log("✓ browser_navigate：allow-url 外被拦截");
+
+const denied = await call("browser_evaluate", { fn: "() => document.title" }, 7);
+if (!denied.isError || !denied.text.includes("permission_denied")) {
+  fail(`navigate-allowlist 档下 browser_evaluate 未被档位拒绝：${denied.text}`);
+}
+console.log("✓ browser_evaluate：navigate-allowlist 档返回 permission_denied");
 
 // --- 多浏览器路由：/mcp/laptop 绑定 laptop ---
 const initLaptop = await post(

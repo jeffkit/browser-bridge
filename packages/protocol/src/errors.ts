@@ -28,6 +28,10 @@ export const ErrorCode = {
   EvaluateFailed: "evaluate_failed",
   /** URL 命中 --allow-url 拒绝列表之外 / 未在允许列表内 */
   UrlNotAllowed: "url_not_allowed",
+  /** 当前 --permission 档位不允许该工具 */
+  PermissionDenied: "permission_denied",
+  /** 目标 tab 不是本会话创建/导航过的（owner 校验拒绝） */
+  TabNotOwned: "tab_not_owned",
   /** 兜底 */
   Internal: "internal",
 } as const;
@@ -54,4 +58,10 @@ export const ErrorCodeHints: Record<string, string> = {
   [ErrorCode.TabNotFound]: "目标 tab 已关闭，先 browser_tab_list 获取当前有效 tab。",
   [ErrorCode.PageNotInjectable]: "该页面不允许注入脚本（如 chrome:// 网上应用店、PDF 查看器），请换普通网页。",
   [ErrorCode.StaleRef]: "元素引用已失效（页面跳转或刷新），请重新 browser_snapshot。",
+  [ErrorCode.UrlNotAllowed]:
+    "目标 URL 不在 gateway 的 --allow-url 允许列表内（导航兜底拦截也会返回此码）；改用允许的站点，或调整 gateway 启动参数。",
+  [ErrorCode.PermissionDenied]:
+    "当前权限档不允许该动作。gateway 默认最窄档 read-only：需要页面交互（click/fill/type/press/navigate/tab_open）请用 --permission navigate-allowlist，需要 browser_evaluate 请用 --permission full。",
+  [ErrorCode.TabNotOwned]:
+    "目标 tabId 不是本会话创建/导航过的标签页，默认拒绝；确需操作浏览器里已有的标签页，用 --allow-foreign-tabs 启动 gateway。",
 };

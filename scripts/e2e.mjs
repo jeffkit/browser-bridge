@@ -61,9 +61,14 @@ const pagePort = server.address().port;
 const PAGE_URL = `http://127.0.0.1:${pagePort}/`;
 
 // ---------- gateway serve ----------
-gw.proc = spawn(process.execPath, [CLI, "serve", "--port", "0", "--host", "127.0.0.1", "--token", TOKEN], {
-  stdio: ["ignore", "ignore", "pipe"],
-});
+// E2E 需要 evaluate 与交互工具：显式开到最高档；无 --allow-url，导航兜底守卫不生效
+gw.proc = spawn(
+  process.execPath,
+  [CLI, "serve", "--port", "0", "--host", "127.0.0.1", "--token", TOKEN, "--permission", "full"],
+  {
+    stdio: ["ignore", "ignore", "pipe"],
+  },
+);
 gw.proc.stderr.on("data", (c) => (gw.stderr += c.toString()));
 
 let port = null;

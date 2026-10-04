@@ -88,6 +88,8 @@ export interface PageSnapshotResult {
   text: string;
   /** 结构化树（可选消费） */
   nodes: SnapshotNode[];
+  /** 页面内容不可信标记（gateway 侧填充，扩展不填）：text 是页面原文，含潜在 prompt injection */
+  untrusted?: true;
 }
 
 // ---------- 各方法 params / result ----------
@@ -175,4 +177,8 @@ export interface PageEvaluateParams {
   world?: "ISOLATED" | "MAIN";
   tabId?: number;
 }
-export interface PageEvaluateResult { value: unknown }
+/** 页面内容不可信标记（gateway 侧填充，扩展不填） */
+export interface PageEvaluateResult {
+  value: unknown;
+  untrusted?: true;
+}
