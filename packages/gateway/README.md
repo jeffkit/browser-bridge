@@ -13,8 +13,8 @@ npx browser-bridge-gateway token
 # 直连模式：扩展 WS + MCP streamable HTTP（远程 Agent 接入）
 npx browser-bridge-gateway serve --token <你的token>
 
-# 公网中转模式：双方都在 NAT 后 / 多浏览器集中管理（多 token + MCP 强制 Bearer）
-npx browser-bridge-gateway relay --token <浏览器A的token> --token <agent用的token>
+# 公网中转模式：双方都在 NAT 后 / 多浏览器集中管理（token 按浏览器 ID 绑定 + MCP 强制 Bearer）
+npx browser-bridge-gateway relay --token home=<浏览器A的token> --token laptop=<浏览器B的token>
 
 # 同机模式：由 Agent 以 stdio MCP 拉起
 npx browser-bridge-gateway mcp --token <你的token>
@@ -27,11 +27,11 @@ npx browser-bridge-gateway mcp --token <你的token>
 | 命令 | 场景 |
 |------|------|
 | `serve` | 常驻：扩展 WS + MCP streamable HTTP（`/mcp`、`/mcp/<浏览器ID>`） |
-| `relay` | 公网中转：多 token 注册表 + MCP 强制 `Authorization: Bearer` |
+| `relay` | 公网中转：`--token <浏览器ID>=<token>` 绑定映射 + MCP 强制 `Authorization: Bearer` |
 | `mcp` | stdio：由同机 Agent 拉起（进程内含扩展 WS server） |
 | `token` | 生成随机 token |
 
-通用参数：`-p, --port`（默认 17833，0 为随机）、`--host`（默认 0.0.0.0）、`--token`（可多次）、`--allow-url <regex>`（URL 允许列表，可多次，缺省不限制）。
+通用参数：`-p, --port`（默认 17833，0 为随机）、`--host`（默认 0.0.0.0）、`--token`（可多次；relay 必须 `<浏览器ID>=<token>`，格式/唯一性非法或为空即启动失败）、`--allow-url <regex>`（URL 允许列表，可多次，缺省不限制）。
 
 ## MCP 工具面
 
@@ -39,13 +39,13 @@ npx browser-bridge-gateway mcp --token <你的token>
 
 ## 安全
 
-- token 鉴权：扩展 hello 握手校验，不匹配即断；relay 模式 MCP 每请求 Bearer，且已在线的浏览器槽位只认其配对 token。
+- token 鉴权：扩展 hello 握手校验，不匹配即断；relay 模式 MCP 每请求 Bearer，且全程按 `<浏览器ID>=<token>` 绑定（hello、顶替、离线/在线 Bearer 都只认该浏览器 ID 的 token）。
 - 传输加密由部署侧提供：公网部署务必前置 caddy/nginx（wss）或走 Tailscale。
 - `--allow-url` 限制 Agent 可导航的站点。
 
 ## 环境变量
 
-- `BROWSER_BRIDGE_TOKEN`：未提供 `--token` 时使用的默认 token（单值；多个 token 请重复 `--token`）。
+- `BROWSER_BRIDGE_TOKEN`：未提供 `--token` 时使用的默认 token（单值；重复用 `--token` 提供更多；relay 模式下必须改用 `--token <浏览器ID>=<token>`）。
 
 ## License
 

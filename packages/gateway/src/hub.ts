@@ -30,7 +30,7 @@ export interface ConnectedBrowser {
 /**
  * 浏览器侧接入枢纽：
  * - WS server（根路径）承载扩展出站连接，hello+token 鉴权
- * - 多浏览器：按 hello.browserId 分流；同 browserId 新连接顶替旧连接，不同 browserId 并存
+ * - 多浏览器：按 hello.browserId 分流；同 browserId 同 token 新连接顶替旧连接，不同 browserId 并存
  * - 同一 HTTP server 挂 /healthz 与 MCP streamable HTTP（经 httpHandler）
  * - checkUrl 提供 --allow-url 允许列表校验
  */
@@ -57,12 +57,14 @@ export class BrowserHub {
     return this.sessions.get(browserId) ?? null;
   }
 
-  /** 当前在线的浏览器列表（browser_status 展示用）。 */
-  listBrowsers(): ConnectedBrowser[] {
-    return [...this.sessions.entries()].map(([browserId, s]) => ({
-      browserId,
-      client: s.client,
-    }));
+  /** 当前在线的浏览器列表（browser_status 展示用）；传 token 则只返回该 token 绑定的浏览器。 */
+  listBrowsers(token?: string): ConnectedBrowser[] {
+    return [...this.sessions.entries()]
+      .filter(([, s]) => token === undefined || s.token === token)
+      .map(([browserId, s]) => ({
+        browserId,
+        client: s.client,
+      }));
   }
 
   get address(): { port: number; host: string } {
@@ -89,6 +91,18 @@ export class BrowserHub {
     for (const client of this.wss.clients) client.terminate();
     await new Promise<void>((resolve) => this.wss.close(() => resolve()));
     await new Promise<void>((resolve) => this.httpServer.close(() => resolve()));
+  }
+
+  /**
+   * 槽位归属判定（hello 与 relay 的 MCP Bearer 共用，避免两处规则漂移）：
+   * 严格模式（browserTokens 非空）下 token 必须绑定该 browserId，未映射 browserId 一律拒绝；
+   * 否则查注册表。
+   */
+  authAllows(browserId: string, token: string | null): boolean {
+    if (!token) return false;
+    const bound = this.opts.config.browserTokens;
+    if (bound && bound.size > 0) return bound.get(browserId) === token;
+    return this.opts.config.allowedTokens.includes(token);
   }
 
   /** --allow-url 校验：未配置则全放行。 */
@@ -151,23 +165,30 @@ export class BrowserHub {
       ws.close(4002, "protocol version mismatch");
       return;
     }
-    if (!this.opts.config.allowedTokens.includes(hello.auth)) {
-      this.log(`token 校验失败，拒绝连接`);
-      ws.close(4003, "auth failed");
-      return;
-    }
     const browserId = hello.browserId ?? DEFAULT_BROWSER_ID;
     if (!BROWSER_ID_PATTERN.test(browserId)) {
       this.log(`browserId 非法（需匹配 ${BROWSER_ID_PATTERN}）：${browserId}`);
       ws.close(4004, "invalid browserId");
       return;
     }
+    if (!this.authAllows(browserId, hello.auth)) {
+      this.log(`token 校验失败，拒绝连接（browserId=${browserId}）`);
+      ws.close(4003, "auth failed");
+      return;
+    }
+
+    // 同一 browserId：仅同 token 的新连接顶替旧连接（其余一律拒绝，避免跨用户劫持）；
+    // 不同 browserId 并存
+    const existing = this.sessions.get(browserId);
+    if (existing && existing.token !== hello.auth) {
+      this.log(`浏览器「${browserId}」拒绝顶替：token 与该槽位当前连接不匹配`);
+      ws.close(4003, "auth failed");
+      return;
+    }
 
     const client: SessionClientInfo = { name: hello.client.name, version: hello.client.version };
     const session = new BrowserSession(newSessionId(), ws, client, hello.auth, this.log);
 
-    // 同一 browserId：新连接顶替旧连接；不同 browserId 并存
-    const existing = this.sessions.get(browserId);
     if (existing) {
       this.log(
         `浏览器「${browserId}」新连接 ${session.id}（${client.name} v${client.version}）顶替 ${existing.id}`,

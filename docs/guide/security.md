@@ -45,7 +45,7 @@ node packages/gateway/dist/cli.js serve --token <t> \
 
 ## 其他边界
 
-- **多浏览器 / relay**：按 `browserId` 分流，同一 ID 新连接顶替旧连接（防抢占）；relay 模式下 MCP 每请求需 `Authorization: Bearer`，且**已在线的浏览器槽位只认它自己握手用的 token**——注册表内其他 token 无法越权操控（详见 [Relay](./relay) 的鉴权规则）。
+- **多浏览器 / relay**：按 `browserId` 分流，同一 ID 只有持同一 token 的新连接才能顶替旧连接（防抢占）；relay 模式下 MCP 每请求需 `Authorization: Bearer`，且**全程按 `<browserId>=<token>` 绑定：hello、顶替、离线/在线 MCP Bearer 都只认该 browserId 的 token**——注册表内其他 token 无法越权操控（详见 [Relay](./relay) 的鉴权规则）。
 - **无审批流**：当前版本 Agent 的操作不会向你二次确认。若任务敏感，建议敏感站点不放行（用 `--allow-url`），或人在旁边时才启动 gateway。
 - **最小暴露面**：`serve` 模式的 MCP 端点没有独立鉴权（依赖网络边界），不要暴露给不可信网络；公网场景请改用 `relay` 模式（强制 Bearer）+ 反代加 IP 白名单或 mTLS。
 - **relay 是信任边界**：中转服务器运营者技术上可见全部指令与页面数据，请部署在自己的 VPS 上。

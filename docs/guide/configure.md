@@ -23,7 +23,7 @@ npx browser-bridge-gateway@latest serve --token s3cr3t-token
 |------|------|------|
 | `-p, --port <n>` | `17833` | 监听端口，`0` 为随机 |
 | `--host <h>` | `0.0.0.0` | 监听地址 |
-| `--token <t>` | 环境变量 `BROWSER_BRIDGE_TOKEN`，都没有则随机生成并打印 | 扩展握手 token；**可重复提供**（relay 注册表） |
+| `--token <t>` | 环境变量 `BROWSER_BRIDGE_TOKEN`，都没有则随机生成并打印 | 扩展握手 token；**可重复提供**（relay 必须为 `<browserId>=<token>`，格式或唯一性非法则启动失败） |
 | `--allow-url <regex>` | 不限制 | URL 允许列表正则，**可多次提供**，限制 Agent 可导航的站点 |
 
 示例：只允许操作公司内网与 GitHub：

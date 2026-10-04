@@ -9,7 +9,7 @@
 
 | 错误码 | 含义 | 常见原因与处理 |
 |--------|------|----------------|
-| `auth_failed` | 扩展握手鉴权失败 | 扩展 options 的 token 与 gateway `--token` 不一致；改对后保存即重连 |
+| `auth_failed` | 扩展握手鉴权失败 | 扩展 options 的 token 与 gateway `--token` 不一致；relay 下扩展 token 必须与该浏览器 ID 的绑定 token 一致（`--token <browserId>=<token>`）；改对后保存即重连 |
 | `browser_disconnected` | gateway 收到请求时扩展不在线 | 浏览器没开 / 扩展被禁用 / 地址填错 / 网络断了；先 `browser_status` 排查 |
 | `timeout` | 扩展响应超时 | 页面卡死或浏览器忙碌；重试或加大 `timeoutMs` |
 | `method_not_found` | 未知方法 | 扩展与 gateway 版本不匹配，两侧都更新 |

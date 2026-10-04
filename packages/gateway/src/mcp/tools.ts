@@ -10,10 +10,12 @@ import {
 import type { BrowserHub } from "../hub.js";
 import { GATEWAY_VERSION } from "../config.js";
 
-/** 工具的运行目标：共享 hub + 该 MCP 实例绑定的浏览器。 */
+/** 工具的运行目标：共享 hub + 该 MCP 实例绑定的浏览器 + 调用方身份。 */
 export interface ToolTarget {
   hub: BrowserHub;
   browserId: string;
+  /** 调用方 token（relay）；缺省 = 无身份 → browsers 返回全量 */
+  token?: string;
 }
 
 const ToolResults = {
@@ -59,7 +61,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "browser_status",
     description:
-      "查看浏览器连接状态：本工具绑定的浏览器是否在线、扩展名称/版本、gateway 版本、URL 允许列表、当前在线的全部浏览器（多浏览器/relay 场景用 browsers 字段）。其他 browser_* 工具报 browser_disconnected 时先用它排查。",
+      "查看浏览器连接状态：本工具绑定的浏览器是否在线、扩展名称/版本、gateway 版本、URL 允许列表、当前在线的浏览器（relay 模式下仅本 token 绑定的那台）。其他 browser_* 工具报 browser_disconnected 时先用它排查。",
     schema: {},
     handler: async (_args, target) => {
       const s = target.hub.getSession(target.browserId);
@@ -69,7 +71,7 @@ export const TOOLS: ToolDef[] = [
         client: s?.client ?? null,
         gatewayVersion: GATEWAY_VERSION,
         allowUrlsEnabled: target.hub.allowUrlCount > 0,
-        browsers: target.hub.listBrowsers(),
+        browsers: target.hub.listBrowsers(target.token),
       };
     },
   },

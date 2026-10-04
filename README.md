@@ -110,8 +110,8 @@ pnpm install && pnpm build
 
 ## 安全模型
 
-- **token 鉴权**：扩展 hello 握手携带，不匹配即断（WS close 4003）。`relay` 模式支持多 token 注册表，且 MCP 每请求强制 `Authorization: Bearer`。
-- **多浏览器会话**：扩展以 `browserId` 标识设备，同一 gateway/relay 可并存多台浏览器；MCP 经 `/mcp/<浏览器ID>` 绑定目标。已在线的浏览器槽位只认其配对 token。
+- **token 鉴权**：扩展 hello 握手携带，不匹配即断（WS close 4003）。`relay` 模式支持多浏览器绑定（token 形如 `<browserId>=<token>`），且 MCP 每请求强制 `Authorization: Bearer`，槽位与 Bearer 均按此绑定（含离线）。
+- **多浏览器会话**：扩展以 `browserId` 标识设备，同一 gateway/relay 可并存多台浏览器；MCP 经 `/mcp/<浏览器ID>` 绑定目标。同一槽位只有持同一 token 的连接才能顶替。
 - **传输加密**：gateway 不做 TLS 终结。公网部署请前置 caddy/nginx 提供 `wss://`，或走 Tailscale 等加密网络；`ws://` 仅限可信内网。
 - **URL 允许列表**（可选）：`--allow-url <regex>`（可多次），限制 `navigate`/`tab_open` 的目标 URL，越界返回 `url_not_allowed`。缺省不限制。
 - **权限**：扩展申请 `tabs`/`scripting`/`storage` + `<all_urls>`（全操控与截图所需），安装时浏览器会提示「读取和更改您在所有网站上的数据」。Firefox 版 `host_permissions` 为可选权限，需在 about:addons 手动授予。
