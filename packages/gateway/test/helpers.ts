@@ -1,4 +1,5 @@
 import WebSocket from "ws";
+import { PROTOCOL_VERSION } from "@browser-bridge/protocol";
 
 export const TOKEN = "test-token-1234";
 
@@ -14,7 +15,7 @@ export function sendHello(ws: WebSocket, auth: string = TOKEN, browserId?: strin
   ws.send(
     JSON.stringify({
       type: "hello",
-      proto: 1,
+      proto: PROTOCOL_VERSION,
       auth,
       client: { name: "fake-extension", version: "0.0.1" },
       ...(browserId !== undefined ? { browserId } : {}),

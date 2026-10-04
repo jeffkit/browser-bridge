@@ -8,7 +8,15 @@ import { DEFAULT_BROWSER_ID } from "@browser-bridge/protocol";
 import { BrowserHub } from "./hub.js";
 import { createMcpServer } from "./mcp/server.js";
 import { bearerToken, createStreamableHttpHandler } from "./mcp/http.js";
-import { GATEWAY_VERSION, generateToken, parseAllowUrls, type GatewayConfig } from "./config.js";
+import {
+  GATEWAY_VERSION,
+  generateToken,
+  parseAllowUrls,
+  PermissionTiers,
+  resolvePermission,
+  type GatewayConfig,
+  type Permission,
+} from "./config.js";
 
 /** 所有日志走 stderr：stdio 模式下 stdout 是 MCP 通道，禁止污染。 */
 function log(msg: string): void {
@@ -20,17 +28,34 @@ interface CommonOpts {
   host?: string;
   token?: string[];
   allowUrl?: string[];
+  permission?: string;
+  allowForeignTabs?: boolean;
 }
 
 function buildConfig(o: CommonOpts): GatewayConfig {
   const tokens = [...(o.token ?? [])];
   if (process.env.BROWSER_BRIDGE_TOKEN) tokens.push(process.env.BROWSER_BRIDGE_TOKEN);
+  const permission = o.permission ?? "read-only";
+  if (!PermissionTiers.includes(permission as Permission)) {
+    throw new Error(`--permission 取值非法：${permission}（可选：${PermissionTiers.join(" | ")}）`);
+  }
   return {
     port: o.port !== undefined ? Number(o.port) : 17833,
     host: o.host ?? "0.0.0.0",
     allowedTokens: tokens,
     allowUrls: parseAllowUrls(o.allowUrl),
+    permission: permission as Permission,
+    allowForeignTabs: o.allowForeignTabs === true,
   };
+}
+
+/** 启动时把生效的动作面策略打印出来（stderr），避免「以为开着门禁」。 */
+function logPolicy(config: GatewayConfig): void {
+  log(
+    `权限档：${resolvePermission(config)}（read-only < navigate-allowlist < full）；` +
+      `非本会话创建的既有标签页：${config.allowForeignTabs ? "允许" : "拒绝"}；` +
+      `URL 允许列表：${config.allowUrls.length > 0 ? `${config.allowUrls.length} 条（含导航兜底）` : "不限制"}`,
+  );
 }
 
 /** token 缺省时随机生成（打印在 stderr，提示重启会换）。 */
@@ -45,6 +70,7 @@ function ensureTokens(config: GatewayConfig): void {
 async function runServe(o: CommonOpts): Promise<void> {
   const config = buildConfig(o);
   ensureTokens(config);
+  logPolicy(config);
   // handler 的 newServer 回调在首个 MCP 请求到达时才求值，此处闭包引用尚未初始化的 hub 是安全的
   const httpHandler = createStreamableHttpHandler((browserId) => createMcpServer(hub, browserId));
   const hub = new BrowserHub({ config, log, httpHandler });
@@ -58,6 +84,7 @@ async function runServe(o: CommonOpts): Promise<void> {
 async function runMcp(o: CommonOpts): Promise<void> {
   const config = buildConfig(o);
   ensureTokens(config);
+  logPolicy(config);
   // 同进程：WS server 承载扩展，stdio 承载本地 agent 的 MCP 客户端（绑定 default 浏览器）
   const hub = new BrowserHub({ config, log });
   await hub.start();
@@ -74,6 +101,7 @@ async function runMcp(o: CommonOpts): Promise<void> {
 async function runRelay(o: CommonOpts): Promise<void> {
   const config = buildConfig(o);
   ensureTokens(config);
+  logPolicy(config);
   const registry = new Set(config.allowedTokens);
   log(`token 注册表：${registry.size} 个（扩展与 agent 的 Bearer 均须来自其中）`);
 
@@ -164,7 +192,9 @@ export function runCli(argv: string[]): void {
       .option("-p, --port <n>", "监听端口，0 为随机", "17833")
       .option("--host <h>", "监听地址", "0.0.0.0")
       .option("--token <t>", "扩展握手 token（可多次；也可用环境变量 BROWSER_BRIDGE_TOKEN）", (v: string, prev: string[]) => [...prev, v], [] as string[])
-      .option("--allow-url <regex>", "URL 允许列表正则，可多次提供；缺省不限制", (v: string, prev: string[]) => [...prev, v], [] as string[]);
+      .option("--allow-url <regex>", "URL 允许列表正则，可多次提供；缺省不限制。同时下发扩展做导航兜底", (v: string, prev: string[]) => [...prev, v], [] as string[])
+      .option("--permission <tier>", `动作面权限档：${PermissionTiers.join(" | ")}（默认最窄，越高越危险）`, "read-only")
+      .option("--allow-foreign-tabs", "允许操作/列出非本会话创建的既有标签页（默认拒绝）", false);
     return cmd;
   };
 

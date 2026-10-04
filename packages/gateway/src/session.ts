@@ -4,6 +4,7 @@ import {
   bridgeError,
   ErrorCode,
   makeRequestId,
+  type NavBlockedMessage,
   type ResultMessage,
   type WireMessage,
 } from "@browser-bridge/protocol";
@@ -20,11 +21,28 @@ interface PendingEntry {
   method: string;
 }
 
+/** 导航兜底拦截记录（扩展上报，browser_status 展示给 agent）。 */
+export interface NavBlockRecord {
+  tabId: number;
+  url: string;
+  from?: string;
+  code: string;
+  at: number;
+}
+
+/** navBlocks 保留条数上限。 */
+const NAV_BLOCK_LIMIT = 20;
+
 /**
- * 一条已通过鉴权的扩展连接。负责「请求 → 等 result」的关联与超时。
+ * 一条已通过鉴权的扩展连接。负责「请求 → 等 result」的关联与超时，
+ * 以及本会话的 owner 集合（本会话创建/导航过的 tab）与导航拦截记录。
  */
 export class BrowserSession {
   private pending = new Map<string, PendingEntry>();
+  /** 本会话（连接生命周期）创建或导航过的 tabId；browserId 重连即清空 */
+  private ownedTabs = new Set<number>();
+  /** 扩展上报的导航兜底拦截（最新在后） */
+  readonly navBlocks: NavBlockRecord[] = [];
 
   constructor(
     readonly id: string,
@@ -70,8 +88,25 @@ export class BrowserSession {
       this.send({ type: "pong" });
       return;
     }
-    // gateway → 扩展单向通道，扩展不应发 request/pong
+    if (msg.type === "nav_blocked") {
+      this.recordNavBlock(msg);
+      return;
+    }
+    // gateway → 扩展单向通道，扩展不应发 request/pong/allowlist
     this.log(`忽略扩展消息 type=${(msg as { type: string }).type}`);
+  }
+
+  /** 记为 owned（本会话创建/导航过的 tab）。 */
+  ownTab(tabId: number): void {
+    this.ownedTabs.add(tabId);
+  }
+
+  ownsTab(tabId: number): boolean {
+    return this.ownedTabs.has(tabId);
+  }
+
+  get ownedTabIds(): number[] {
+    return [...this.ownedTabs];
   }
 
   close(reason = "replaced"): void {
@@ -103,7 +138,23 @@ export class BrowserSession {
     else entry.reject(msg.error);
   }
 
-  private send(msg: WireMessage): void {
+  private recordNavBlock(msg: NavBlockedMessage): void {
+    this.navBlocks.push({
+      tabId: msg.tabId,
+      url: msg.url,
+      ...(msg.from !== undefined ? { from: msg.from } : {}),
+      code: msg.code,
+      at: Date.now(),
+    });
+    if (this.navBlocks.length > NAV_BLOCK_LIMIT) {
+      this.navBlocks.splice(0, this.navBlocks.length - NAV_BLOCK_LIMIT);
+    }
+    this.log(`导航兜底拦截 [${msg.code}] tab=${msg.tabId} → ${msg.url}（已回退 ${msg.from ?? "about:blank"}）`);
+  }
+
+  /** 向扩展发送消息（hub 下发 allowlist 也走这里）。 */
+  send(msg: WireMessage): void {
+    if (!this.connected) return;
     this.ws.send(JSON.stringify(msg));
   }
 }

@@ -17,7 +17,16 @@ afterEach(async () => {
 
 async function startHubWithFakeBrowser(): Promise<{ hub: BrowserHub; port: number; ws: WebSocket }> {
   const hub: BrowserHub = new BrowserHub({
-    config: { port: 0, host: "127.0.0.1", allowedTokens: [TOKEN], allowUrls: [] },
+    // 本文件测传输/工具链路，不测策略：开满档，避免权限档与 owner 校验干扰
+    // （档位/owner 策略见 issue3-permission-tiers.test.ts、nav-guard.test.ts）
+    config: {
+      port: 0,
+      host: "127.0.0.1",
+      allowedTokens: [TOKEN],
+      allowUrls: [],
+      permission: "full",
+      allowForeignTabs: true,
+    },
     httpHandler: createStreamableHttpHandler((browserId) => createMcpServer(hub, browserId)),
   });
   await hub.start();

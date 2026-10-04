@@ -96,14 +96,16 @@ pnpm install && pnpm build
 
 ## MCP 工具面
 
+工具分三档（`--permission`，默认最窄 `read-only`）：`read-only` = status/tab_list/snapshot/screenshot/scroll；`navigate-allowlist` = 追加 navigate/tab_open/close/select/click/fill/type/press；`full` = 再追加 evaluate。
+
 | 工具 | 说明 |
 |------|------|
-| `browser_status` | 连接状态 / 版本 / 允许列表 |
-| `browser_tab_list` / `browser_tab_open` / `browser_tab_close` / `browser_tab_select` | 标签页管理 |
+| `browser_status` | 连接状态 / 版本 / 生效权限档 / 允许列表 / 导航拦截记录（`navBlocked`） |
+| `browser_tab_list` / `browser_tab_open` / `browser_tab_close` / `browser_tab_select` | 标签页管理（默认只列/只动本会话创建或导航过的 tab） |
 | `browser_navigate` | 导航并等待（`waitFor: load/domcontentloaded/none`） |
-| `browser_snapshot` | 可访问性快照：缩进文本骨架 + `@eN` 元素引用 |
+| `browser_snapshot` | 可访问性快照：缩进文本骨架 + `@eN` 元素引用（内容带不可信标记） |
 | `browser_click` / `browser_fill` / `browser_type` / `browser_press` / `browser_scroll` | 页面交互（按 `@eN` 引用） |
-| `browser_evaluate` | 页面内执行 JS（MAIN world 页面上下文；ISOLATED 因 MV3 扩展 CSP 禁 eval 不可用） |
+| `browser_evaluate` | 页面内执行 JS（需 `--permission full`；MAIN world 页面上下文；ISOLATED 因 MV3 扩展 CSP 禁 eval 不可用） |
 | `browser_screenshot` | 可见区域截图（PNG / JPEG），返回图片内容 |
 
 推荐流程：`browser_snapshot` → 读 `@eN` → `browser_click/fill/...`。页面跳转后旧引用失效（`stale_ref`），重新快照即可。
@@ -111,22 +113,30 @@ pnpm install && pnpm build
 ## 安全模型
 
 - **token 鉴权**：扩展 hello 握手携带，不匹配即断（WS close 4003）。`relay` 模式支持多 token 注册表，且 MCP 每请求强制 `Authorization: Bearer`。
+- **动作面权限档**：`--permission read-only|navigate-allowlist|full`（默认 `read-only`，最窄）。档位不足返回 `permission_denied`；非法取值直接启动失败，不静默回退。
+- **会话归属（owner）**：默认只能读写本会话创建/导航过的标签页，非 owner 的 `tabId` 返回 `tab_not_owned`，`browser_tab_list` 只列 owner（附 `hiddenNonOwned` 计数）；确需操作既有标签页用 `--allow-foreign-tabs`。
 - **多浏览器会话**：扩展以 `browserId` 标识设备，同一 gateway/relay 可并存多台浏览器；MCP 经 `/mcp/<浏览器ID>` 绑定目标。已在线的浏览器槽位只认其配对 token。
 - **传输加密**：gateway 不做 TLS 终结。公网部署请前置 caddy/nginx 提供 `wss://`，或走 Tailscale 等加密网络；`ws://` 仅限可信内网。
-- **URL 允许列表**（可选）：`--allow-url <regex>`（可多次），限制 `navigate`/`tab_open` 的目标 URL，越界返回 `url_not_allowed`。缺省不限制。
-- **权限**：扩展申请 `tabs`/`scripting`/`storage` + `<all_urls>`（全操控与截图所需），安装时浏览器会提示「读取和更改您在所有网站上的数据」。Firefox 版 `host_permissions` 为可选权限，需在 about:addons 手动授予。
+- **URL 允许列表**（可选）：`--allow-url <regex>`（可多次）既校验 `navigate`/`tab_open` 的入参，也下发给扩展做**导航兜底**——点链接/表单提交/JS 跳转越界会被回退并上报 `url_not_allowed`（见 `browser_status.navBlocked`）。缺省不限制；兜底仅作用于 gateway 驱动过的 tab、且仅连接期间生效。
+- **页面内容不可信**：`browser_snapshot` 的 `text` 用 `<untrusted-page-content>` 界出且结果带 `untrusted: true`；`browser_evaluate` 结果同样带 `untrusted: true`——页面里的「指令」不得当作 Agent 指令。
+- **权限**：扩展申请 `tabs`/`scripting`/`storage` + `<all_urls>`（全操控与截图所需，导航兜底复用 `tabs`），安装时浏览器会提示「读取和更改您在所有网站上的数据」。Firefox 版 `host_permissions` 为可选权限，需在 about:addons 手动授予。
 - 单浏览器会话：新扩展连接顶替旧连接；MCP 调用期间扩展断开会返回 `browser_disconnected`。
+- **两侧需同版本**：协议 v2（allowlist 下发 / `nav_blocked` 上报）起，旧扩展连新版 gateway 会被 close `4002` 拒绝。
 
 ## 验收清单（手工，扩展端）
 
+> 默认档 `read-only` 下 `browser_tab_open` / `browser_navigate` / `browser_click` 会被 `permission_denied` 拒绝——按下面步骤做手工验收时请显式开档：
+> `npx browser-bridge-gateway serve --token <t> --permission full --allow-foreign-tabs`
+
 1. 加载 `dist-extension` → options 配置地址 + token → popup 变绿。
-2. agent 侧 `browser_status` → `connected: true`。
+2. agent 侧 `browser_status` → `connected: true`，并显示当前 `permission` 档。
 3. `browser_tab_open` 新开 `https://example.com` → 本地浏览器出现新标签页。
-4. `browser_navigate` 到带图页面 → `browser_snapshot` 输出含 `@eN` 的文本骨架。
+4. `browser_navigate` 到带图页面 → `browser_snapshot` 输出含 `@eN` 的文本骨架（外层被 `<untrusted-page-content>` 包裹）。
 5. `browser_click` 点击某 `@eN` → 页面响应。
 6. `browser_screenshot` → agent 收到图片。
 7. 断开网络 → popup 变灰 → 恢复网络 → 自动重连变绿。
 8. 错误 token → 扩展 30s 慢退避；改正后保存 → 立即重连成功。
+9. 反向验收：默认档启动（不加 `--permission`）→ `browser_evaluate` 返回 `permission_denied`；`--permission navigate-allowlist --allow-url '^https://example\.com/'` 下在 example.com 页面点站外链接 → 页面被回退，`browser_status.navBlocked` 出现记录。
 
 ## 开发
 

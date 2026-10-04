@@ -24,14 +24,19 @@ npx browser-bridge-gateway@latest serve --token s3cr3t-token
 | `-p, --port <n>` | `17833` | 监听端口，`0` 为随机 |
 | `--host <h>` | `0.0.0.0` | 监听地址 |
 | `--token <t>` | 环境变量 `BROWSER_BRIDGE_TOKEN`，都没有则随机生成并打印 | 扩展握手 token；**可重复提供**（relay 注册表） |
-| `--allow-url <regex>` | 不限制 | URL 允许列表正则，**可多次提供**，限制 Agent 可导航的站点 |
+| `--permission <tier>` | `read-only`（最窄档） | 动作面权限档：`read-only` / `navigate-allowlist` / `full`（详见[安全](/guide/security)）。取值非法直接启动失败，不静默回退 |
+| `--allow-foreign-tabs` | 关闭 | 允许操作/列出非本会话创建的既有标签页；缺省只允许本会话 navigate/create 过的 tab |
+| `--allow-url <regex>` | 不限制 | URL 允许列表正则，**可多次提供**。既校验 `navigate`/`tab_open` 入参，也下发给扩展做导航兜底（点链接/表单/JS 跳转越界会被回退并上报） |
 
-示例：只允许操作公司内网与 GitHub：
+示例：只允许操作公司内网与 GitHub，且需要填表/点击：
 
 ```bash
 npx browser-bridge-gateway@latest serve --token s3cr3t-token \
+  --permission navigate-allowlist \
   --allow-url '^https://(github\.com|git\.corp\.example\.cn)/'
 ```
+
+需要 `browser_evaluate`（页面内执行 JS）时才开 `--permission full`；不确定就先用默认档，按 `permission_denied` 提示逐步放开。启动日志（stderr）会打印生效档位与既有标签页策略。
 
 保持进程常驻（systemd / pm2 / `nohup` 均可）。生产建议前置反向代理提供 TLS：
 
@@ -97,8 +102,10 @@ gateway 也可以由 Agent 直接拉起（单进程内含扩展 WS server + stdi
 
 Agent 里依次执行：
 
-1. `browser_status` → 期望 `"connected": true`，并显示扩展名称与版本；
-2. `browser_tab_list` → 列出你浏览器当前打开的标签页；
+默认档 `read-only` 只看不动，第 3 条需要 gateway 以 `--permission navigate-allowlist`（或更高）启动；默认档下它返回 `permission_denied` 属正常行为。
+
+1. `browser_status` → 期望 `"connected": true`，并显示扩展名称与版本、当前 `permission` 档；
+2. `browser_tab_list` → 列出本会话创建/导航过的标签页（`hiddenNonOwned` = 被策略隐藏的其他标签页数量）；
 3. `browser_tab_open` 新开 `https://example.com` → 本地浏览器出现新标签页。
 
 三条都通，安装完成。如果卡住，看 [FAQ / 故障排查](/reference/faq)。

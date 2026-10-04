@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BrowserHub } from "../src/hub.js";
+import { TOOLS } from "../src/mcp/tools.js";
 import { openWs, recvJson, sendHello, TOKEN, waitUntil } from "./helpers.js";
 
 async function startHub(allowUrls: RegExp[] = []): Promise<BrowserHub> {
@@ -218,5 +219,56 @@ describe("BrowserHub 扩展接入", () => {
     expect(hub2.checkUrl("https://example.com/a")).toBe(true);
     expect(hub2.checkUrl("https://evil.com/")).toBe(false);
     await hub2.stop();
+  });
+
+  it("hello 后下发 allowlist（正则源码透传，供扩展做导航兜底）", async () => {
+    const hub = await startHub([/^https:\/\/example\.com\//, /corp\.example\.cn/]);
+    try {
+      const ws = await openWs(hub.address.port);
+      sendHello(ws);
+      const allowlist = await recvJson(ws, "allowlist");
+      expect(allowlist.patterns).toEqual(["^https:\\/\\/example\\.com\\/", "corp\\.example\\.cn"]);
+      expect(hub.getSession()).not.toBeNull();
+    } finally {
+      await hub.stop();
+    }
+  });
+
+  it("扩展上报 nav_blocked → session 记录并由 browser_status 暴露", async () => {
+    const hub = await startHub();
+    try {
+      const ws = await openWs(hub.address.port);
+      sendHello(ws);
+      await waitUntil(() => hub.getSession() !== null);
+
+      ws.send(
+        JSON.stringify({
+          type: "nav_blocked",
+          tabId: 5,
+          url: "https://evil.example.org/",
+          from: "https://example.com/",
+          code: "url_not_allowed",
+        }),
+      );
+      await waitUntil(() => hub.getSession()!.navBlocks.length === 1);
+      expect(hub.getSession()!.navBlocks[0]).toMatchObject({
+        tabId: 5,
+        url: "https://evil.example.org/",
+        from: "https://example.com/",
+        code: "url_not_allowed",
+      });
+
+      const def = TOOLS.find((t) => t.name === "browser_status")!;
+      const out = (await def.handler({}, { hub, browserId: "default" })) as {
+        permission: string;
+        allowForeignTabs: boolean;
+        navBlocked: unknown[];
+      };
+      expect(out.permission).toBe("read-only");
+      expect(out.allowForeignTabs).toBe(false);
+      expect(out.navBlocked).toHaveLength(1);
+    } finally {
+      await hub.stop();
+    }
   });
 });
