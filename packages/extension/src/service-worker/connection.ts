@@ -8,6 +8,7 @@ import {
 } from "@browser-bridge/protocol";
 import { api } from "../common/api.js";
 import { loadConfig, onConfigChanged, type ExtConfig } from "../common/config.js";
+import { navGuard } from "./nav-guard.js";
 
 export type ConnectionState = "disconnected" | "connecting" | "connected" | "error";
 
@@ -54,6 +55,12 @@ export class Connection {
     console.log(`[browser-bridge] ${msg}`);
   }
 
+  /** 向 gateway 发送单向上报（如 nav_blocked）；未连接时静默丢弃。 */
+  send(msg: WireMessage): void {
+    const ws = this.ws;
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+  }
+
   private connect(): void {
     const { gatewayUrl, token } = this.cfg;
     if (!gatewayUrl || !token) {
@@ -93,6 +100,10 @@ export class Connection {
       const msg = parseWireMessage(String(event.data));
       if (!msg) return;
       if (msg.type === "pong") return;
+      if (msg.type === "allowlist") {
+        navGuard.setAllowlist(msg.patterns);
+        return;
+      }
       if (msg.type === "request") {
         void this.handleRequest(ws, msg as RequestEnvelope);
       }

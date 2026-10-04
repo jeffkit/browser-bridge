@@ -32,6 +32,10 @@
     EvaluateFailed: "evaluate_failed",
     /** URL 命中 --allow-url 拒绝列表之外 / 未在允许列表内 */
     UrlNotAllowed: "url_not_allowed",
+    /** 当前 --permission 档位不允许该工具 */
+    PermissionDenied: "permission_denied",
+    /** 目标 tab 不是本会话创建/导航过的（owner 校验拒绝） */
+    TabNotOwned: "tab_not_owned",
     /** 兜底 */
     Internal: "internal"
   };
@@ -41,11 +45,14 @@
     [ErrorCode.Timeout]: "\u6269\u5C55\u54CD\u5E94\u8D85\u65F6\uFF0C\u9875\u9762\u53EF\u80FD\u5361\u6B7B\u6216\u6D4F\u89C8\u5668\u5FD9\u788C\uFF0C\u53EF\u91CD\u8BD5\u6216\u52A0\u5927 timeoutMs\u3002",
     [ErrorCode.TabNotFound]: "\u76EE\u6807 tab \u5DF2\u5173\u95ED\uFF0C\u5148 browser_tab_list \u83B7\u53D6\u5F53\u524D\u6709\u6548 tab\u3002",
     [ErrorCode.PageNotInjectable]: "\u8BE5\u9875\u9762\u4E0D\u5141\u8BB8\u6CE8\u5165\u811A\u672C\uFF08\u5982 chrome:// \u7F51\u4E0A\u5E94\u7528\u5E97\u3001PDF \u67E5\u770B\u5668\uFF09\uFF0C\u8BF7\u6362\u666E\u901A\u7F51\u9875\u3002",
-    [ErrorCode.StaleRef]: "\u5143\u7D20\u5F15\u7528\u5DF2\u5931\u6548\uFF08\u9875\u9762\u8DF3\u8F6C\u6216\u5237\u65B0\uFF09\uFF0C\u8BF7\u91CD\u65B0 browser_snapshot\u3002"
+    [ErrorCode.StaleRef]: "\u5143\u7D20\u5F15\u7528\u5DF2\u5931\u6548\uFF08\u9875\u9762\u8DF3\u8F6C\u6216\u5237\u65B0\uFF09\uFF0C\u8BF7\u91CD\u65B0 browser_snapshot\u3002",
+    [ErrorCode.UrlNotAllowed]: "\u76EE\u6807 URL \u4E0D\u5728 gateway \u7684 --allow-url \u5141\u8BB8\u5217\u8868\u5185\uFF08\u5BFC\u822A\u515C\u5E95\u62E6\u622A\u4E5F\u4F1A\u8FD4\u56DE\u6B64\u7801\uFF09\uFF1B\u6539\u7528\u5141\u8BB8\u7684\u7AD9\u70B9\uFF0C\u6216\u8C03\u6574 gateway \u542F\u52A8\u53C2\u6570\u3002",
+    [ErrorCode.PermissionDenied]: "\u5F53\u524D\u6743\u9650\u6863\u4E0D\u5141\u8BB8\u8BE5\u52A8\u4F5C\u3002gateway \u9ED8\u8BA4\u6700\u7A84\u6863 read-only\uFF1A\u9700\u8981\u9875\u9762\u4EA4\u4E92\uFF08click/fill/type/press/navigate/tab_open\uFF09\u8BF7\u7528 --permission navigate-allowlist\uFF0C\u9700\u8981 browser_evaluate \u8BF7\u7528 --permission full\u3002",
+    [ErrorCode.TabNotOwned]: "\u76EE\u6807 tabId \u4E0D\u662F\u672C\u4F1A\u8BDD\u521B\u5EFA/\u5BFC\u822A\u8FC7\u7684\u6807\u7B7E\u9875\uFF0C\u9ED8\u8BA4\u62D2\u7EDD\uFF1B\u786E\u9700\u64CD\u4F5C\u6D4F\u89C8\u5668\u91CC\u5DF2\u6709\u7684\u6807\u7B7E\u9875\uFF0C\u7528 --allow-foreign-tabs \u542F\u52A8 gateway\u3002"
   };
 
   // ../protocol/dist/messages.js
-  var PROTOCOL_VERSION = 1;
+  var PROTOCOL_VERSION = 2;
   var HEARTBEAT_INTERVAL_MS = 2e4;
   function parseWireMessage(raw) {
     let value;
@@ -63,6 +70,8 @@
       case "pong":
       case "request":
       case "result":
+      case "allowlist":
+      case "nav_blocked":
         return value;
       default:
         return null;
@@ -129,6 +138,64 @@
     });
   }
 
+  // src/service-worker/nav-guard.ts
+  var NavGuard = class {
+    allowPatterns = [];
+    ownedTabs = /* @__PURE__ */ new Set();
+    /** 每个 tab 最近一次允许的 URL，作为回退目标 */
+    lastAllowed = /* @__PURE__ */ new Map();
+    installed = false;
+    /** 拦截回调（index.ts 接到 connection.send 上） */
+    onBlocked = null;
+    install() {
+      if (this.installed) return;
+      this.installed = true;
+      api.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+        this.onUpdated(tabId, changeInfo.url ?? tab.url);
+      });
+    }
+    /** 接收 gateway 下发的允许列表（正则源码）；空数组 = 不限制；非法正则跳过（不影响其余条目）。 */
+    setAllowlist(patterns) {
+      const compiled = [];
+      for (const pattern of patterns ?? []) {
+        try {
+          compiled.push(new RegExp(pattern));
+        } catch {
+        }
+      }
+      this.allowPatterns = compiled;
+    }
+    /** 记为 owned（gateway 创建/导航过的 tab）。 */
+    trackOwnedTab(tabId) {
+      this.ownedTabs.add(tabId);
+    }
+    /** 记录该 tab 当前允许的 URL，作为后续越界导航的回退目标。 */
+    noteAllowedUrl(tabId, url) {
+      if (url) this.lastAllowed.set(tabId, url);
+    }
+    onUpdated(tabId, url) {
+      if (!url) return;
+      if (!this.ownedTabs.has(tabId)) return;
+      if (this.allowPatterns.length === 0) return;
+      const from = this.lastAllowed.get(tabId);
+      if (url === from) return;
+      if (!/^https?:/i.test(url)) {
+        this.lastAllowed.set(tabId, url);
+        return;
+      }
+      if (this.allowPatterns.some((re) => re.test(url))) {
+        this.lastAllowed.set(tabId, url);
+        return;
+      }
+      const target = from ?? "about:blank";
+      this.lastAllowed.set(tabId, target);
+      void Promise.resolve(api.tabs.update(tabId, { url: target })).catch(() => {
+      });
+      this.onBlocked?.({ tabId, url, ...from !== void 0 ? { from } : {}, code: "url_not_allowed" });
+    }
+  };
+  var navGuard = new NavGuard();
+
   // src/service-worker/connection.ts
   var Connection = class {
     status = "disconnected";
@@ -155,6 +222,11 @@
     }
     log(msg2) {
       console.log(`[browser-bridge] ${msg2}`);
+    }
+    /** 向 gateway 发送单向上报（如 nav_blocked）；未连接时静默丢弃。 */
+    send(msg2) {
+      const ws = this.ws;
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg2));
     }
     connect() {
       const { gatewayUrl, token } = this.cfg;
@@ -193,6 +265,10 @@
         const msg2 = parseWireMessage(String(event.data));
         if (!msg2) return;
         if (msg2.type === "pong") return;
+        if (msg2.type === "allowlist") {
+          navGuard.setAllowlist(msg2.patterns);
+          return;
+        }
         if (msg2.type === "request") {
           void this.handleRequest(ws, msg2);
         }
@@ -310,6 +386,8 @@
     const tab = await resolveTab(p.tabId);
     const tabId = tab.id;
     await api.tabs.update(tabId, { url: p.url });
+    navGuard.trackOwnedTab(tabId);
+    navGuard.noteAllowedUrl(tabId, p.url);
     const waitFor = p.waitFor ?? "load";
     if (waitFor === "none") {
       return { tabId, url: p.url, title: tab.title ?? "", status: "complete" };
@@ -448,6 +526,11 @@
           url: params.url,
           active: params.active ?? true
         });
+        const createdId = tab.id;
+        if (typeof createdId === "number") {
+          navGuard.trackOwnedTab(createdId);
+          navGuard.noteAllowedUrl(createdId, params.url);
+        }
         return { tab: tabInfo(tab) };
       }
       case "tabs.close":
@@ -486,6 +569,8 @@
   // src/service-worker/index.ts
   var connection = new Connection();
   connection.onRequest = (req) => dispatch(req.method, req.params);
+  navGuard.install();
+  navGuard.onBlocked = (info) => connection.send({ type: "nav_blocked", ...info });
   void connection.start();
   api.runtime.onInstalled.addListener(() => void connection.start());
   api.runtime.onStartup.addListener(() => void connection.start());

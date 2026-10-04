@@ -14,7 +14,15 @@ interface JsonRpcResponse {
 
 async function startHub(authenticate?: (req: IncomingMessage, browserId: string) => boolean): Promise<BrowserHub> {
   const hub: BrowserHub = new BrowserHub({
-    config: { port: 0, host: "127.0.0.1", allowedTokens: [TOKEN], allowUrls: [] },
+    // 本文件测 HTTP 入口与鉴权，不测策略：开满档（策略见 issue3-permission-tiers.test.ts）
+    config: {
+      port: 0,
+      host: "127.0.0.1",
+      allowedTokens: [TOKEN],
+      allowUrls: [],
+      permission: "full",
+      allowForeignTabs: true,
+    },
     httpHandler: createStreamableHttpHandler((browserId) => createMcpServer(hub, browserId), {
       authenticate,
     }),

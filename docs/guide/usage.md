@@ -4,14 +4,18 @@
 
 gateway 向 Agent 暴露 14 个 MCP 工具，完整参数见 [MCP 工具参考](/reference/tools)：
 
-| 分组 | 工具 |
-|------|------|
-| 状态 | `browser_status` |
-| 标签页 | `browser_tab_list` `browser_tab_open` `browser_tab_close` `browser_tab_select` |
-| 导航 | `browser_navigate` |
-| 读取 | `browser_snapshot` `browser_screenshot` |
-| 交互 | `browser_click` `browser_fill` `browser_type` `browser_press` `browser_scroll` |
-| 脚本 | `browser_evaluate` |
+| 分组 | 工具 | 最低档位 |
+|------|------|---------|
+| 状态 | `browser_status` | `read-only` |
+| 标签页 | `browser_tab_list` | `read-only` |
+| 标签页 | `browser_tab_open` `browser_tab_close` `browser_tab_select` | `navigate-allowlist` |
+| 导航 | `browser_navigate` | `navigate-allowlist` |
+| 读取 | `browser_snapshot` `browser_screenshot` | `read-only` |
+| 交互 | `browser_click` `browser_fill` `browser_type` `browser_press` | `navigate-allowlist` |
+| 交互 | `browser_scroll` | `read-only` |
+| 脚本 | `browser_evaluate` | `full` |
+
+档位由 gateway 启动参数 `--permission` 决定，**默认 `read-only`（最窄）**；档位不足返回 `permission_denied`。除状态类工具外，显式传入的 `tabId` 必须是本会话创建或导航过的标签页（否则 `tab_not_owned`）。
 
 ## 核心循环：snapshot → @eN → act
 
@@ -53,11 +57,13 @@ Agent: browser_screenshot
        → （返回图片，确认登录成功）
 ```
 
+> 这一回合用到 navigate / fill / click / screenshot，需要 gateway 以 `--permission navigate-allowlist`（或 `full`）启动。
+
 ## 读取类工具的选择
 
 - **`browser_snapshot`（默认首选）**：返回结构化文本骨架，token 便宜，交互必需；
 - **`browser_screenshot`**：给多模态 Agent 看视觉细节（布局、验证码、图表），返回 PNG/JPEG 图片内容；非活跃标签页会先自动切换到前台再截；
-- **`browser_evaluate`**：抽取骨架表达不了的精确数据，如 `() => JSON.parse(document.querySelector('#__NEXT_DATA__').textContent)`。在页面上下文（MAIN world）执行，受页面 CSP 约束；`world: "ISOLATED"` 因 MV3 扩展 CSP 禁 eval 不可用，调用会得到明确报错。
+- **`browser_evaluate`**：抽取骨架表达不了的精确数据，如 `() => JSON.parse(document.querySelector('#__NEXT_DATA__').textContent)`。**需 gateway 以 `--permission full` 启动**（否则返回 `permission_denied`）。在页面上下文（MAIN world）执行，受页面 CSP 约束；`world: "ISOLATED"` 因 MV3 扩展 CSP 禁 eval 不可用，调用会得到明确报错。返回结果带 `untrusted: true`——页面内容不可信。
 
 ## 扩展端状态
 

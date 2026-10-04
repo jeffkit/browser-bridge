@@ -1,7 +1,8 @@
 import type { BridgeError } from "./errors.js";
 
-/** 当前线协议版本；双方 hello 不一致时 gateway 拒绝并提示升级。 */
-export const PROTOCOL_VERSION = 1;
+/** 当前线协议版本；双方 hello 不一致时 gateway 拒绝并提示升级。
+ *  v2：新增 gateway → 扩展的 allowlist 下发与扩展 → gateway 的 nav_blocked 上报（导航兜底）。 */
+export const PROTOCOL_VERSION = 2;
 
 /** 协议层心跳间隔（毫秒）。扩展定时发 ping，gateway 回 pong。 */
 export const HEARTBEAT_INTERVAL_MS = 20_000;
@@ -49,13 +50,35 @@ export type ResultMessage =
   | { type: "result"; id: string; ok: true; result: unknown }
   | { type: "result"; id: string; ok: false; error: BridgeError };
 
+/**
+ * gateway → 扩展：导航允许列表（--allow-url 的正则源码）。
+ * 空数组 = 不限制；扩展在 tabs.onUpdated 上据此兜底非白名单导航。
+ */
+export interface AllowlistMessage {
+  type: "allowlist";
+  patterns: string[];
+}
+
+/** 扩展 → gateway：导航兜底拦截上报（点链接/表单提交/JS 跳转绕过了参数校验）。 */
+export interface NavBlockedMessage {
+  type: "nav_blocked";
+  tabId: number;
+  /** 被拦截的目标 URL */
+  url: string;
+  /** 回退到的上一个允许 URL（缺省回退 about:blank） */
+  from?: string;
+  code: "url_not_allowed";
+}
+
 /** 任何一端 → 另一端的消息 union。 */
 export type WireMessage =
   | HelloMessage
   | PingMessage
   | PongMessage
   | RequestMessage
-  | ResultMessage;
+  | ResultMessage
+  | AllowlistMessage
+  | NavBlockedMessage;
 
 /** 解析并粗校验一条线消息；返回 null 表示无法识别（调用方应忽略并记日志）。 */
 export function parseWireMessage(raw: string): WireMessage | null {
@@ -73,6 +96,8 @@ export function parseWireMessage(raw: string): WireMessage | null {
     case "pong":
     case "request":
     case "result":
+    case "allowlist":
+    case "nav_blocked":
       return value as WireMessage;
     default:
       return null;
