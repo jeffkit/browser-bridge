@@ -65,7 +65,7 @@ npx browser-bridge-gateway relay --token a --token b   # 公网中转模式
 
 ## 当前状态
 
-v0.3+：协议 15 方法 + browserId 多浏览器路由；MCP 14 工具、三部署形态（serve / mcp / relay）+ gateway call 子命令与 AI Skill；扩展 Chromium + Firefox 双产物；gateway 测试 21 项 + 冒烟 + 真实浏览器 E2E（Playwright 加载扩展）全绿；CI（unit + e2e）；扩展 zip 与 npm 包由 tag 触发自动发布。已知限制：browser_evaluate 仅支持 MAIN world（MV3 扩展 CSP 禁 eval，ISOLATED 显式报错）。
+v0.3+：协议 15 方法 + browserId 多浏览器路由；MCP 14 工具、三部署形态（serve / mcp / relay）+ gateway call 子命令与 AI Skill；扩展 Chromium + Firefox 双产物；gateway 测试 42 项 + 冒烟 + 真实浏览器 E2E（Playwright 加载扩展）全绿；CI（unit + e2e）；扩展 zip 与 npm 包由 tag 触发自动发布。已知限制：browser_evaluate 仅支持 MAIN world（MV3 扩展 CSP 禁 eval，ISOLATED 显式报错）。
 
 ## 深入阅读
 
