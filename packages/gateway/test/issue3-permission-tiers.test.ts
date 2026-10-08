@@ -24,6 +24,7 @@ afterEach(async () => {
 
 /** 起 hub + 假扩展（对任何请求都回 ok）。 */
 async function startHub(opts: { permission?: Permission; allowUrls?: RegExp[] } = {}) {
+  let snapshotGen = 0;
   const config: GatewayConfig = {
     port: 0,
     host: "127.0.0.1",
@@ -38,14 +39,24 @@ async function startHub(opts: { permission?: Permission; allowUrls?: RegExp[] } 
   sendHello(ws);
   await waitUntil(() => hub.getSession() !== null);
   ws.on("message", (data) => {
-    const msg = JSON.parse(String(data)) as { type: string; id?: string };
+    const msg = JSON.parse(String(data)) as { type: string; id?: string; method?: string };
     if (msg.type !== "request" || !msg.id) return;
+    // snapshot 回带当前代次（模拟扩展行为，从 1 起单调），其余请求统一回 ok
+    if (msg.method === "page.snapshot") snapshotGen += 1;
     ws.send(
       JSON.stringify({
         type: "result",
         id: msg.id,
         ok: true,
-        result: { tabId: 1, url: "https://example.com/", title: "t", text: "", nodes: [], value: 42 },
+        result: {
+          tabId: 1,
+          url: "https://example.com/",
+          title: "t",
+          ...(msg.method === "page.snapshot" ? { gen: snapshotGen, truncated: false } : {}),
+          text: "",
+          nodes: [],
+          value: 42,
+        },
       }),
     );
   });
@@ -63,7 +74,9 @@ async function callTool(
     const value = await def.handler(args, { hub, browserId: "default" });
     return { denied: false, value };
   } catch (err) {
-    return { denied: true, code: (err as { code?: string }).code, message: String(err) };
+    // bridgeError 是普通对象（非 Error 实例），message/code 都要从对象上取
+    const e = err as { code?: string; message?: string };
+    return { denied: true, code: e.code, message: e.message ?? String(err) };
   }
 }
 
@@ -127,5 +140,69 @@ describe("Issue #3 权限档", () => {
     const r = await callTool(hub, "browser_navigate", { url: "https://evil.example/" });
     expect(r.denied).toBe(true);
     expect(r.code).toBe("url_not_allowed");
+  });
+});
+
+describe("Issue #7 ref 代次绑定", () => {
+  it("full 档放行后 ref 网关校验：@eN 旧格式直接 stale_ref（不发往扩展）", async () => {
+    const { hub, ws } = await startHub({ permission: "full" });
+    await callTool(hub, "browser_navigate", { url: "https://example.com/" });
+    await callTool(hub, "browser_snapshot", { tabId: 1 });
+
+    // 记录扩展收到的请求：旧格式 ref 必须在 gateway 侧被拦，不产生扩展往返
+    let extensionRequests = 0;
+    ws.on("message", () => {
+      extensionRequests++;
+    });
+    const before = extensionRequests;
+
+    const r = await callTool(hub, "browser_click", { ref: "@e1", tabId: 1 });
+    expect(r.denied).toBe(true);
+    expect(r.code).toBe("stale_ref");
+    expect(String(r.message)).toContain("缺少快照代次");
+    expect(extensionRequests).toBe(before);
+  });
+
+  it("同一 tab 换了新快照（gen 变化）→ 旧 gen 的 ref 报 stale_ref，新 gen 放行", async () => {
+    const { hub } = await startHub({ permission: "full" });
+    await callTool(hub, "browser_navigate", { url: "https://example.com/" });
+
+    // 第一次快照 gen=1（假扩展从 0 递增）
+    await callTool(hub, "browser_snapshot", { tabId: 1 });
+    // 旧式并发会话的典型错误：拿旧 ref 点新快照的同序号元素
+    const stale = await callTool(hub, "browser_click", { ref: "@s0:e3", tabId: 1 });
+    expect(stale.denied).toBe(true);
+    expect(stale.code).toBe("stale_ref");
+    expect(String(stale.message)).toContain("旧快照");
+
+    // 第二次快照 gen=2 → @s1:* 全部失效，@s2:* 有效
+    await callTool(hub, "browser_snapshot", { tabId: 1 });
+    const stale2 = await callTool(hub, "browser_click", { ref: "@s1:e3", tabId: 1 });
+    expect(stale2.denied).toBe(true);
+    expect(stale2.code).toBe("stale_ref");
+    expect(String(stale2.message)).toContain("旧快照");
+
+    const fresh = await callTool(hub, "browser_fill", { ref: "@s2:e3", value: "x", tabId: 1 });
+    expect(fresh.denied, `当前代次的 ref 应放行：${fresh.code} ${fresh.message}`).toBe(false);
+  });
+
+  it("未在本会话快照过的 tabId 透传给扩展（双闸的第二闸）", async () => {
+    const { hub } = await startHub({ permission: "full", allowUrls: [] });
+    // navigate 让 tab 1 成 owner，但从不对它 snapshot → 无绑定记录
+    await callTool(hub, "browser_navigate", { url: "https://example.com/" });
+    const r = await callTool(hub, "browser_click", { ref: "@s9:e1", tabId: 1 });
+    // 透传：假扩展一律回 ok，说明请求真的发到了扩展（扩展代次校验兜底）
+    expect(r.denied).toBe(false);
+  });
+
+  it("navigate 到新页面后清除绑定：不误拦，回落扩展校验", async () => {
+    const { hub } = await startHub({ permission: "full" });
+    await callTool(hub, "browser_navigate", { url: "https://example.com/" });
+    await callTool(hub, "browser_snapshot", { tabId: 1 });
+    // 导航后旧 ref 在页面上必然失效，但 gateway 不再持有代次信息 → 不拦，交给扩展
+    const r = await callTool(hub, "browser_navigate", { url: "https://example.com/other" });
+    expect(r.denied).toBe(false);
+    const click = await callTool(hub, "browser_click", { ref: "@s1:e1", tabId: 1 });
+    expect(click.denied).toBe(false);
   });
 });

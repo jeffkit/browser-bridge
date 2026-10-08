@@ -1,8 +1,9 @@
 import type { BridgeError } from "./errors.js";
 
 /** 当前线协议版本；双方 hello 不一致时 gateway 拒绝并提示升级。
- *  v2：新增 gateway → 扩展的 allowlist 下发与扩展 → gateway 的 nav_blocked 上报（导航兜底）。 */
-export const PROTOCOL_VERSION = 2;
+ *  v2：新增 gateway → 扩展的 allowlist 下发与扩展 → gateway 的 nav_blocked 上报（导航兜底）。
+ *  v3：@eN 引用带快照代次（@sN:eM，跨快照复用旧 ref 必报 stale_ref）+ 快照结果回带 tabId/截断标记。 */
+export const PROTOCOL_VERSION = 3;
 
 /** 协议层心跳间隔（毫秒）。扩展定时发 ping，gateway 回 pong。 */
 export const HEARTBEAT_INTERVAL_MS = 20_000;
@@ -107,4 +108,28 @@ export function parseWireMessage(raw: string): WireMessage | null {
 /** 生成请求 id（gateway 侧使用；单调即可）。 */
 export function makeRequestId(): string {
   return `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// ---------- @eN 引用与快照代次（ref generation） ----------
+
+/**
+ * 引用格式 `@s<gen>:e<N>`：gen 为该 tab content script 内的单调快照代次。
+ * 每次 takeSnapshot 递增并清空上一代 ref；交互参数携代次，与当前代次不符即 stale_ref。
+ * 未带代次的旧式 `@eN` 视为代次 0（不存在的新代次 ≥1）→ 必报 stale_ref，fail-closed。
+ */
+export const REF_PATTERN = /^@s(\d+):e(\d+)$/;
+
+/** 解析引用为 { gen, index }；不匹配返回 null。 */
+export function parseRef(ref: string): { gen: number; index: number } | null {
+  const m = REF_PATTERN.exec(ref);
+  if (!m) return null;
+  const gen = Number(m[1]);
+  const index = Number(m[2]);
+  if (!Number.isInteger(gen) || !Number.isInteger(index)) return null;
+  return { gen, index };
+}
+
+/** 生成 `@s<gen>:e<index>` 形式的引用。 */
+export function makeRef(gen: number, index: number): string {
+  return `@s${gen}:e${index}`;
 }

@@ -22,7 +22,7 @@ export const ErrorCode = {
   PageNotInjectable: "page_not_injectable",
   /** 页面内操作失败（元素消失、选择器失效等） */
   PageActionFailed: "page_action_failed",
-  /** snapshot 的 @eN 引用已失效（页面跳转/刷新后缓存清空） */
+  /** snapshot 的 @sN:eM 引用已失效（页面跳转/刷新/新快照使代次过期，或 ref 来自其他 tab） */
   StaleRef: "stale_ref",
   /** 页面脚本执行抛错或返回不可序列化值 */
   EvaluateFailed: "evaluate_failed",
@@ -57,7 +57,8 @@ export const ErrorCodeHints: Record<string, string> = {
   [ErrorCode.Timeout]: "扩展响应超时，页面可能卡死或浏览器忙碌，可重试或加大 timeoutMs。",
   [ErrorCode.TabNotFound]: "目标 tab 已关闭，先 browser_tab_list 获取当前有效 tab。",
   [ErrorCode.PageNotInjectable]: "该页面不允许注入脚本（如 chrome:// 网上应用店、PDF 查看器），请换普通网页。",
-  [ErrorCode.StaleRef]: "元素引用已失效（页面跳转或刷新），请重新 browser_snapshot。",
+  [ErrorCode.StaleRef]:
+    "元素引用已失效（页面跳转/刷新，或快照已被新快照取代）。请对目标 tab 重新 browser_snapshot，并使用最新一次快照返回的 ref。",
   [ErrorCode.UrlNotAllowed]:
     "目标 URL 不在 gateway 的 --allow-url 允许列表内（导航兜底拦截也会返回此码）；改用允许的站点，或调整 gateway 启动参数。",
   [ErrorCode.PermissionDenied]:

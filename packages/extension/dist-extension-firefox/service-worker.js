@@ -26,7 +26,7 @@
     PageNotInjectable: "page_not_injectable",
     /** 页面内操作失败（元素消失、选择器失效等） */
     PageActionFailed: "page_action_failed",
-    /** snapshot 的 @eN 引用已失效（页面跳转/刷新后缓存清空） */
+    /** snapshot 的 @sN:eM 引用已失效（页面跳转/刷新/新快照使代次过期，或 ref 来自其他 tab） */
     StaleRef: "stale_ref",
     /** 页面脚本执行抛错或返回不可序列化值 */
     EvaluateFailed: "evaluate_failed",
@@ -45,14 +45,14 @@
     [ErrorCode.Timeout]: "\u6269\u5C55\u54CD\u5E94\u8D85\u65F6\uFF0C\u9875\u9762\u53EF\u80FD\u5361\u6B7B\u6216\u6D4F\u89C8\u5668\u5FD9\u788C\uFF0C\u53EF\u91CD\u8BD5\u6216\u52A0\u5927 timeoutMs\u3002",
     [ErrorCode.TabNotFound]: "\u76EE\u6807 tab \u5DF2\u5173\u95ED\uFF0C\u5148 browser_tab_list \u83B7\u53D6\u5F53\u524D\u6709\u6548 tab\u3002",
     [ErrorCode.PageNotInjectable]: "\u8BE5\u9875\u9762\u4E0D\u5141\u8BB8\u6CE8\u5165\u811A\u672C\uFF08\u5982 chrome:// \u7F51\u4E0A\u5E94\u7528\u5E97\u3001PDF \u67E5\u770B\u5668\uFF09\uFF0C\u8BF7\u6362\u666E\u901A\u7F51\u9875\u3002",
-    [ErrorCode.StaleRef]: "\u5143\u7D20\u5F15\u7528\u5DF2\u5931\u6548\uFF08\u9875\u9762\u8DF3\u8F6C\u6216\u5237\u65B0\uFF09\uFF0C\u8BF7\u91CD\u65B0 browser_snapshot\u3002",
+    [ErrorCode.StaleRef]: "\u5143\u7D20\u5F15\u7528\u5DF2\u5931\u6548\uFF08\u9875\u9762\u8DF3\u8F6C/\u5237\u65B0\uFF0C\u6216\u5FEB\u7167\u5DF2\u88AB\u65B0\u5FEB\u7167\u53D6\u4EE3\uFF09\u3002\u8BF7\u5BF9\u76EE\u6807 tab \u91CD\u65B0 browser_snapshot\uFF0C\u5E76\u4F7F\u7528\u6700\u65B0\u4E00\u6B21\u5FEB\u7167\u8FD4\u56DE\u7684 ref\u3002",
     [ErrorCode.UrlNotAllowed]: "\u76EE\u6807 URL \u4E0D\u5728 gateway \u7684 --allow-url \u5141\u8BB8\u5217\u8868\u5185\uFF08\u5BFC\u822A\u515C\u5E95\u62E6\u622A\u4E5F\u4F1A\u8FD4\u56DE\u6B64\u7801\uFF09\uFF1B\u6539\u7528\u5141\u8BB8\u7684\u7AD9\u70B9\uFF0C\u6216\u8C03\u6574 gateway \u542F\u52A8\u53C2\u6570\u3002",
     [ErrorCode.PermissionDenied]: "\u5F53\u524D\u6743\u9650\u6863\u4E0D\u5141\u8BB8\u8BE5\u52A8\u4F5C\u3002gateway \u9ED8\u8BA4\u6700\u7A84\u6863 read-only\uFF1A\u9700\u8981\u9875\u9762\u4EA4\u4E92\uFF08click/fill/type/press/navigate/tab_open\uFF09\u8BF7\u7528 --permission navigate-allowlist\uFF0C\u9700\u8981 browser_evaluate \u8BF7\u7528 --permission full\u3002",
     [ErrorCode.TabNotOwned]: "\u76EE\u6807 tabId \u4E0D\u662F\u672C\u4F1A\u8BDD\u521B\u5EFA/\u5BFC\u822A\u8FC7\u7684\u6807\u7B7E\u9875\uFF0C\u9ED8\u8BA4\u62D2\u7EDD\uFF1B\u786E\u9700\u64CD\u4F5C\u6D4F\u89C8\u5668\u91CC\u5DF2\u6709\u7684\u6807\u7B7E\u9875\uFF0C\u7528 --allow-foreign-tabs \u542F\u52A8 gateway\u3002"
   };
 
   // ../protocol/dist/messages.js
-  var PROTOCOL_VERSION = 2;
+  var PROTOCOL_VERSION = 3;
   var HEARTBEAT_INTERVAL_MS = 2e4;
   function parseWireMessage(raw) {
     let value;

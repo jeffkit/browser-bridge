@@ -1,7 +1,7 @@
 /**
  * 真实浏览器 E2E：起 gateway → Playwright 启动本机 Chrome（headed，加载 dist-extension）→
  * 经扩展 service worker 写入配置连上 gateway → MCP 驱动真实页面：
- * 导航 / 快照 @eN / 填表 / 键入 / 点击 / 按键 / 滚动 / 执行 JS / 截图 / 标签页管理 / 失效引用。
+ * 导航 / 快照 @s<gen>:e<N> / 填表 / 键入 / 点击 / 按键 / 滚动 / 执行 JS / 截图 / 标签页管理 / 失效引用 / ref 代次绑定。
  *
  * 前置：pnpm build；本机无 Chrome 时需 pnpm exec playwright install chromium（回退用）。
  * 运行：node scripts/e2e.mjs；无显示环境（CI）用 xvfb-run -a node scripts/e2e.mjs。
@@ -213,8 +213,10 @@ if (navJson.status !== "complete" || navJson.title !== "BB E2E") fail(`导航结
 const tabId = navJson.tabId;
 console.log(`✓ browser_navigate：真实导航到测试页（tabId=${tabId}）`);
 
-// 快照：从结构化树提取 @eN 引用
+// 快照：从结构化树提取 @s<gen>:e<N> 引用
 const snapJson = await val("browser_snapshot", { tabId });
+if (typeof snapJson.gen !== "number" || snapJson.gen < 1) fail(`快照未回带代次 gen：${JSON.stringify(snapJson)}`);
+if (snapJson.truncated === true) fail(`测试页不该被截断：${snapJson.text.slice(-200)}`);
 const collect = (nodes, out) => {
   for (const n of nodes ?? []) {
     if (n.ref) out.push(n);
@@ -227,29 +229,48 @@ const byName = (role, name) => refs.find((n) => n.role === role && (n.name ?? ""
 const inputRef = byName("textbox", "Your name")?.ref;
 const greetRef = byName("button", "Greet")?.ref;
 const linkRef = byName("link", "锚点链接")?.ref;
+const refShape = (r) => /^@s\d+:e\d+$/.test(r ?? "");
 if (!inputRef || !greetRef || !linkRef) fail(`快照缺关键引用：input=${inputRef} button=${greetRef} link=${linkRef}\n${snapJson.text}`);
-if (!snapJson.text.includes(inputRef) || !snapJson.text.includes(greetRef)) fail("快照文本未渲染 @eN 引用");
-console.log(`✓ browser_snapshot：@eN 快照（${refs.length} 个可交互元素，${inputRef}/${greetRef}/${linkRef}）`);
+if (!refs.every((n) => refShape(n.ref))) fail(`ref 未带代次：${refs.map((n) => n.ref).join(",")}`);
+if (!snapJson.text.includes(inputRef) || !snapJson.text.includes(greetRef)) fail("快照文本未渲染引用");
+console.log(`✓ browser_snapshot：@s${snapJson.gen}:eN 快照（${refs.length} 个可交互元素，${inputRef}/${greetRef}/${linkRef}）`);
 
-// fill → 替换语义
+// 同代 ref 可用 → 直接做 fill；随后再拍一次快照（gen+1）→ 旧 ref 必须被拒（gateway 或扩展任一闸拦下均可）
 await val("browser_fill", { ref: inputRef, value: "FILL 测试", tabId });
+const snap2 = await val("browser_snapshot", { tabId });
+if (snap2.gen !== snapJson.gen + 1) fail(`第二次快照 gen 未递增：${snap2.gen}（前值 ${snapJson.gen}）`);
+const staleSameIndex = await call("browser_click", { ref: inputRef, tabId });
+if (!staleSameIndex.isError || !staleSameIndex.text.includes("stale_ref")) {
+  fail(`新快照后旧 gen 的 ref 未报 stale_ref：${staleSameIndex.text}`);
+}
+// 第二次快照里的新 ref 恢复可用
+const collect2 = [];
+collect(snap2.nodes, collect2);
+const inputRef2 = collect2.find((n) => n.role === "textbox" && (n.name ?? "").includes("Your name"))?.ref;
+if (!inputRef2) fail(`第二次快照缺输入框引用：${snap2.text}`);
+await val("browser_fill", { ref: inputRef2, value: "FILL 测试", tabId });
+console.log(`✓ 代次绑定：旧快照 ref（同序号）报 stale_ref，新快照 ref 可用（gen ${snapJson.gen}→${snap2.gen}）`);
+
+// fill → 替换语义（上一步已填入 FILL 测试，这里验证可见效果）
 const got1 = await evalVal("() => String(document.getElementById('name').value)");
 if (got1 !== "FILL 测试") fail(`fill 结果不符：got=${JSON.stringify(got1)}`);
 console.log("✓ browser_fill：真实输入框已填充");
 
-// type → 逐字符追加语义
-await val("browser_type", { ref: inputRef, text: "+typed", tabId });
+// type → 逐字符追加语义（用第二次快照的新 ref）
+await val("browser_type", { ref: inputRef2, text: "+typed", tabId });
 if ((await evalVal("() => document.getElementById('name').value")) !== "FILL 测试+typed") fail("type 结果不符（应为追加）");
-await val("browser_fill", { ref: inputRef, value: "e2e 世界", tabId });
+await val("browser_fill", { ref: inputRef2, value: "e2e 世界", tabId });
 console.log("✓ browser_type：逐字符追加保持 input 事件");
 
-// click → 页面 JS 真实响应
-await val("browser_click", { ref: greetRef, tabId });
+// click → 页面 JS 真实响应（第二次快照的 button ref）
+const greetRef2 = collect2.find((n) => n.role === "button" && (n.name ?? "").includes("Greet"))?.ref;
+if (!greetRef2) fail(`第二次快照缺按钮引用：${snap2.text}`);
+await val("browser_click", { ref: greetRef2, tabId });
 if ((await evalVal("() => document.getElementById('out').textContent")) !== "HELLO:e2e 世界") fail("点击后页面无响应");
 console.log("✓ browser_click：真实点击触发页面 JS");
 
 // press → 合成 keydown 被页面监听
-await val("browser_press", { ref: inputRef, key: "Enter", tabId });
+await val("browser_press", { ref: inputRef2, key: "Enter", tabId });
 if ((await evalVal("() => document.getElementById('out').textContent")) !== "PRESSED:e2e 世界") fail("按键未被页面捕获");
 console.log("✓ browser_press：合成键盘事件被页面捕获");
 
@@ -286,11 +307,11 @@ await val("browser_tab_close", { tabId: newTabId });
 if ((await val("browser_tab_list")).tabs.some((t) => t.id === newTabId)) fail("tab 关闭未生效");
 console.log("✓ browser_tab_open / tab_list / tab_close：标签页管理正常");
 
-// 失效引用：导航后旧 @eN 必须报 stale_ref
+// 失效引用：导航后旧引用必须报 stale_ref
 await val("browser_navigate", { url: PAGE_URL, tabId });
 const staleClick = await call("browser_click", { ref: greetRef, tabId });
 if (!staleClick.isError || !staleClick.text.includes("stale_ref")) fail(`旧引用未报 stale_ref：${staleClick.text}`);
-console.log("✓ 失效引用：页面跳转后旧 @eN 正确报 stale_ref");
+console.log("✓ 失效引用：页面跳转后旧 @sN:eM 正确报 stale_ref");
 
 // ---------- 收尾 ----------
 await context.close();

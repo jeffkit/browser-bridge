@@ -5,7 +5,7 @@
 
 ## 项目概述
 
-Agent 跑在远程机器上，经标准 MCP 连本仓 gateway；gateway 经出站 WebSocket 驱动本地浏览器里的扩展，执行导航/快照/点击输入/截图/执行 JS。与 web-bridge 呼应成对（web-bridge 操控桌面 WebView，本仓操控真实浏览器），协议形状一致（`{id, method, params}` / `{id, ok, result|error}` + `@eN` 引用）。
+Agent 跑在远程机器上，经标准 MCP 连本仓 gateway；gateway 经出站 WebSocket 驱动本地浏览器里的扩展，执行导航/快照/点击输入/截图/执行 JS。与 web-bridge 呼应成对（web-bridge 操控桌面 WebView，本仓操控真实浏览器），协议形状一致（`{id, method, params}` / `{id, ok, result|error}` + `@s<gen>:e<N>` 引用）。
 
 **技术栈：** TypeScript, pnpm workspace, esbuild, ws, MCP SDK, zod, vitest
 **主仓库：** `git@github.com:jeffkit/browser-bridge.git`
@@ -27,7 +27,7 @@ scripts/e2e.mjs      真实浏览器 E2E（Playwright Chromium 加载扩展：�
 - `packages/protocol/src/errors.ts` — 错误码与 agent 排查提示；`messages.ts` — hello.browserId / BROWSER_ID_PATTERN
 - `packages/gateway/src/hub.ts` — WS 鉴权/多浏览器路由；`src/mcp/tools.ts` — 工具面；`src/mcp/http.ts` — /mcp/:browserId 与 Bearer
 - `packages/extension/src/service-worker/router.ts` — 方法→chrome API 分发
-- `packages/extension/src/content/snapshot.ts` — @eN 快照算法；`common/api.ts` — browser.* 适配层
+- `packages/extension/src/content/snapshot.ts` — @s<gen>:e<N> 快照算法；`common/api.ts` — browser.* 适配层
 
 ## 开发约定
 
@@ -65,7 +65,7 @@ npx browser-bridge-gateway relay --token a --token b   # 公网中转模式
 
 ## 当前状态
 
-v0.3+：协议 15 方法 + browserId 多浏览器路由；MCP 14 工具、三部署形态（serve / mcp / relay）+ gateway call 子命令与 AI Skill；扩展 Chromium + Firefox 双产物；gateway 测试 42 项 + 冒烟 + 真实浏览器 E2E（Playwright 加载扩展）全绿；CI（unit + e2e）；扩展 zip 与 npm 包由 tag 触发自动发布。已知限制：browser_evaluate 仅支持 MAIN world（MV3 扩展 CSP 禁 eval，ISOLATED 显式报错）。
+v0.3+：协议 15 方法 + browserId 多浏览器路由；MCP 14 工具、三部署形态（serve / mcp / relay）+ gateway call 子命令与 AI Skill；扩展 Chromium + Firefox 双产物；gateway 测试 46 项 + 冒烟 + 真实浏览器 E2E（Playwright 加载扩展）全绿；CI（unit + e2e）；扩展 zip 与 npm 包由 tag 触发自动发布。已知限制：browser_evaluate 仅支持 MAIN world（MV3 扩展 CSP 禁 eval，ISOLATED 显式报错）。
 
 ## 深入阅读
 

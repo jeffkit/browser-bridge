@@ -35,7 +35,7 @@ npx browser-bridge-gateway mcp --token <你的token>
 
 ## MCP 工具面
 
-14 个工具：`browser_status`、`browser_tab_list/open/close/select`、`browser_navigate`、`browser_snapshot`、`browser_click/fill/type/press/scroll`、`browser_evaluate`、`browser_screenshot`。推荐流：`browser_snapshot` → `@eN` 引用 → 交互。
+14 个工具：`browser_status`、`browser_tab_list/open/close/select`、`browser_navigate`、`browser_snapshot`、`browser_click/fill/type/press/scroll`、`browser_evaluate`、`browser_screenshot`。推荐流：`browser_snapshot` → `@s<gen>:e<N>` 引用 → 交互（引用绑定快照代次，页面一变即 `stale_ref`，不静默错点）。
 
 ## 安全
 

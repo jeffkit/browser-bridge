@@ -1,12 +1,26 @@
-/** @eN 引用解析：失效（页面跳转/元素移除）抛 stale_ref。 */
-export function resolveElement(refs: Map<string, Element>, ref: string): Element {
+import { parseRef } from "@browser-bridge/protocol";
+
+/**
+ * @s<gen>:e<N> 引用解析。
+ * 三重失效检查，任一不过即抛 stale_ref（fail-closed，绝不落到同序号的新元素上）：
+ * - ref 形状：必须是带代次的新格式（旧式 @eN / 乱串直接拒）；
+ * - 代次：必须等于当前快照代次——新 snapshot 一旦发生，旧 ref 全部失效；
+ * - 连接：元素必须仍在文档中（页面跳转/刷新后缓存随注入重建而清空）。
+ */
+export function resolveElement(refs: Map<string, Element>, gen: number, ref: string): Element {
+  const parsed = parseRef(ref);
+  if (!parsed || parsed.gen !== gen || parsed.index < 1) {
+    throw staleRef(ref, `引用 ${ref} 不是本页面当前快照（代次 ${gen}）的元素，请重新 snapshot`);
+  }
   const el = refs.get(ref);
   if (!el || !el.isConnected) {
-    throw Object.assign(new Error(`元素引用 ${ref} 已失效（页面跳转或刷新后需重新 snapshot）`), {
-      code: "stale_ref",
-    });
+    throw staleRef(ref, `元素引用 ${ref} 已失效（页面跳转或刷新后需重新 snapshot）`);
   }
   return el;
+}
+
+function staleRef(ref: string, message: string): Error {
+  return Object.assign(new Error(message), { code: "stale_ref", ref });
 }
 
 function focusEl(el: Element): void {
@@ -25,15 +39,15 @@ function setValueAndEvents(el: HTMLInputElement | HTMLTextAreaElement, value: st
   el.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-export function doClick(refs: Map<string, Element>, ref: string): unknown {
-  const el = resolveElement(refs, ref);
+export function doClick(refs: Map<string, Element>, gen: number, ref: string): unknown {
+  const el = resolveElement(refs, gen, ref);
   focusEl(el);
   (el as HTMLElement).click();
   return { clicked: true, ref };
 }
 
-export function doFill(refs: Map<string, Element>, ref: string, value: string): unknown {
-  const el = resolveElement(refs, ref);
+export function doFill(refs: Map<string, Element>, gen: number, ref: string, value: string): unknown {
+  const el = resolveElement(refs, gen, ref);
   focusEl(el);
   if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
     setValueAndEvents(el, value);
@@ -54,8 +68,8 @@ export function doFill(refs: Map<string, Element>, ref: string, value: string): 
   return { filled: true, ref };
 }
 
-export function doType(refs: Map<string, Element>, ref: string, text: string): unknown {
-  const el = resolveElement(refs, ref);
+export function doType(refs: Map<string, Element>, gen: number, ref: string, text: string): unknown {
+  const el = resolveElement(refs, gen, ref);
   focusEl(el);
   if ((el as HTMLElement).isContentEditable) {
     document.execCommand("insertText", false, text);
@@ -91,8 +105,8 @@ export function parseKey(spec: string): ParsedKey {
   };
 }
 
-export function doPress(refs: Map<string, Element>, keySpec: string, ref?: string): unknown {
-  const target = ref ? resolveElement(refs, ref) : document.activeElement ?? document.body;
+export function doPress(refs: Map<string, Element>, gen: number, keySpec: string, ref?: string): unknown {
+  const target = ref ? resolveElement(refs, gen, ref) : document.activeElement ?? document.body;
   if (ref) focusEl(target);
   const parsed = parseKey(keySpec);
   const init: KeyboardEventInit = {
@@ -108,6 +122,7 @@ export function doPress(refs: Map<string, Element>, keySpec: string, ref?: strin
 
 export function doScroll(
   refs: Map<string, Element>,
+  gen: number,
   direction: "up" | "down" | "left" | "right",
   amount: number,
   ref?: string,
@@ -115,7 +130,7 @@ export function doScroll(
   const dx = direction === "left" ? -amount : direction === "right" ? amount : 0;
   const dy = direction === "up" ? -amount : direction === "down" ? amount : 0;
   if (ref) {
-    const el = resolveElement(refs, ref);
+    const el = resolveElement(refs, gen, ref);
     el.scrollTop += dy;
     el.scrollLeft += dx;
   } else {

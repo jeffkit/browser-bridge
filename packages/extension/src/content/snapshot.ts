@@ -1,4 +1,4 @@
-import type { SnapshotNode } from "@browser-bridge/protocol";
+import { makeRef, type SnapshotNode } from "@browser-bridge/protocol";
 
 const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "META", "LINK", "HEAD"]);
 const MAX_NODES = 800;
@@ -12,8 +12,10 @@ const INTERACTIVE_ROLES = new Set([
 interface PageSnapshot {
   url: string;
   title: string;
+  gen: number;
   text: string;
   nodes: SnapshotNode[];
+  truncated: boolean;
 }
 
 function isVisible(el: Element): boolean {
@@ -96,10 +98,11 @@ function nameOf(el: Element): string | undefined {
   return undefined;
 }
 
-export function takeSnapshot(refs: Map<string, Element>): PageSnapshot {
+export function takeSnapshot(refs: Map<string, Element>, gen: number): PageSnapshot {
   refs.clear();
   let counter = 0;
   let total = 0;
+  let truncated = false;
   const nodes: SnapshotNode[] = [];
   const lines: string[] = [`# ${document.title} (${location.href})`];
 
@@ -120,7 +123,11 @@ export function takeSnapshot(refs: Map<string, Element>): PageSnapshot {
   };
 
   const walk = (el: Element, out: SnapshotNode[], depth: number): void => {
-    if (total >= MAX_NODES || depth > MAX_DEPTH) return;
+    if (total >= MAX_NODES || depth > MAX_DEPTH) {
+      // 超限即丢弃整棵子树且必须显式标记：静默截断会让交互元素整批缺失而 agent 无感知
+      truncated = true;
+      return;
+    }
     if (SKIP_TAGS.has(el.tagName)) return;
     if (!isVisible(el)) return;
 
@@ -129,7 +136,7 @@ export function takeSnapshot(refs: Map<string, Element>): PageSnapshot {
 
     const node: SnapshotNode = { role, children: [] };
     if (isInteractive(el)) {
-      const ref = `@e${++counter}`;
+      const ref = makeRef(gen, ++counter);
       node.ref = ref;
       refs.set(ref, el);
     }
@@ -159,5 +166,5 @@ export function takeSnapshot(refs: Map<string, Element>): PageSnapshot {
 
   if (document.body) walk(document.body, nodes, 0);
   for (const node of nodes) render(node, 0);
-  return { url: location.href, title: document.title, text: lines.join("\n"), nodes };
+  return { url: location.href, title: document.title, gen, text: lines.join("\n"), nodes, truncated };
 }

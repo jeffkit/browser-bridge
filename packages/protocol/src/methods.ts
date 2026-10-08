@@ -3,8 +3,9 @@
  *
  * 约定：
  * - 所有 `tabId?` 缺省时，扩展端取「最近活跃窗口的 active tab」。
- * - 页面元素用 `@eN` 引用（快照时分配，content script 内缓存），
- *   页面跳转/刷新后缓存清空，旧 ref 返回 stale_ref。
+ * - 页面元素用 `@s<gen>:e<N>` 引用（快照时分配，content script 内按代次缓存；
+ *   gen 为该 tab 内单调递增的快照代次）。页面跳转/刷新后缓存清空，旧 ref 返回 stale_ref；
+ *   新快照会使上一代全部失效（代次不匹配），即使元素还在原位也不会静默错点。
  */
 
 export const Method = {
@@ -65,7 +66,7 @@ export const WaitFors: readonly WaitFor[] = ["load", "domcontentloaded", "none"]
  * `ref` 仅出现在可交互元素上。
  */
 export interface SnapshotNode {
-  /** @eN 元素引用，可交互元素才有 */
+  /** @s<gen>:e<N> 元素引用，可交互元素才有 */
   ref?: string;
   /** 隐式角色：button/link/textbox/checkbox/image/heading/generic/text… */
   role: string;
@@ -84,10 +85,14 @@ export interface PageSnapshotResult {
   tabId: number;
   url: string;
   title: string;
-  /** 缩进文本骨架（含 @eN），直接给 LLM 读 */
+  /** 本次快照的代次；交互参数的 ref（@s<gen>:e<N>）与此不符即 stale_ref */
+  gen: number;
+  /** 缩进文本骨架（含 @sN:eM），直接给 LLM 读 */
   text: string;
   /** 结构化树（可选消费） */
   nodes: SnapshotNode[];
+  /** 遍历因 MAX_NODES/MAX_DEPTH 截断时为 true：交互元素可能整批缺失，应缩小范围重拍 */
+  truncated?: boolean;
   /** 页面内容不可信标记（gateway 侧填充，扩展不填）：text 是页面原文，含潜在 prompt injection */
   untrusted?: true;
 }
@@ -142,6 +147,7 @@ export interface TabsScreenshotResult {
 
 export interface PageSnapshotParams { tabId?: number }
 
+/** ref 形如 @s<gen>:e<N>（来自最近一次同 tab 的 snapshot）；代次与当前不符 → stale_ref */
 export interface PageClickParams { ref: string; tabId?: number }
 export interface PageClickResult { clicked: true; ref: string }
 

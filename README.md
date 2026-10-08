@@ -7,7 +7,7 @@
 
 v0.3+ 能力（当前 0.4.0）：远程 Agent 经标准 MCP 操控本地真实浏览器；**多浏览器会话**（`browserId` 路由，`/mcp/<浏览器ID>` 指定目标）；**公网 relay 模式**（双方都在 NAT 后时中转，多 token 注册表 + MCP 强制 Bearer）；**Firefox 支持**（与 Chromium 版同源构建）。
 
-与 [web-bridge](https://github.com/jeffkit/web-bridge) 呼应成对：web-bridge 注入操控桌面应用 WebView；browser-bridge 操控真实浏览器。协议形状一致（`{id, method, params}` 请求 / `{id, ok, result|error}` 应答），`@eN` 元素引用心智相同。
+与 [web-bridge](https://github.com/jeffkit/web-bridge) 呼应成对：web-bridge 注入操控桌面应用 WebView；browser-bridge 操控真实浏览器。协议形状一致（`{id, method, params}` 请求 / `{id, ok, result|error}` 应答），`@s<gen>:e<N>` 元素引用心智相同。
 
 ## 架构
 
@@ -103,12 +103,12 @@ pnpm install && pnpm build
 | `browser_status` | 连接状态 / 版本 / 生效权限档 / 允许列表 / 导航拦截记录（`navBlocked`） |
 | `browser_tab_list` / `browser_tab_open` / `browser_tab_close` / `browser_tab_select` | 标签页管理（默认只列/只动本会话创建或导航过的 tab） |
 | `browser_navigate` | 导航并等待（`waitFor: load/domcontentloaded/none`） |
-| `browser_snapshot` | 可访问性快照：缩进文本骨架 + `@eN` 元素引用（内容带不可信标记） |
-| `browser_click` / `browser_fill` / `browser_type` / `browser_press` / `browser_scroll` | 页面交互（按 `@eN` 引用） |
+| `browser_snapshot` | 可访问性快照：缩进文本骨架 + `@s<gen>:e<N>` 元素引用（内容带不可信标记；截断显式回报） |
+| `browser_click` / `browser_fill` / `browser_type` / `browser_press` / `browser_scroll` | 页面交互（按 `@s<gen>:e<N>` 引用） |
 | `browser_evaluate` | 页面内执行 JS（需 `--permission full`；MAIN world 页面上下文；ISOLATED 因 MV3 扩展 CSP 禁 eval 不可用） |
 | `browser_screenshot` | 可见区域截图（PNG / JPEG），返回图片内容 |
 
-推荐流程：`browser_snapshot` → 读 `@eN` → `browser_click/fill/...`。页面跳转后旧引用失效（`stale_ref`），重新快照即可。
+推荐流程：`browser_snapshot` → 读 `@s<gen>:e<N>` → `browser_click/fill/...`。引用带快照代次：新快照或页面跳转后旧引用一律 `stale_ref`（即使元素还在同序号上也不会静默错点），重新快照即可。
 
 ## 安全模型
 
@@ -121,7 +121,7 @@ pnpm install && pnpm build
 - **页面内容不可信**：`browser_snapshot` 的 `text` 用 `<untrusted-page-content>` 界出且结果带 `untrusted: true`；`browser_evaluate` 结果同样带 `untrusted: true`——页面里的「指令」不得当作 Agent 指令。
 - **权限**：扩展申请 `tabs`/`scripting`/`storage` + `<all_urls>`（全操控与截图所需，导航兜底复用 `tabs`），安装时浏览器会提示「读取和更改您在所有网站上的数据」。Firefox 版 `host_permissions` 为可选权限，需在 about:addons 手动授予。
 - 单浏览器会话：新扩展连接顶替旧连接；MCP 调用期间扩展断开会返回 `browser_disconnected`。
-- **两侧需同版本**：协议 v2（allowlist 下发 / `nav_blocked` 上报）起，旧扩展连新版 gateway 会被 close `4002` 拒绝。
+- **两侧需同版本**：协议 v3（`@s<gen>:e<N>` 代次引用）起，旧扩展连新版 gateway 会被 close `4002` 拒绝。
 
 ## 验收清单（手工，扩展端）
 
@@ -131,8 +131,8 @@ pnpm install && pnpm build
 1. 加载 `dist-extension` → options 配置地址 + token → popup 变绿。
 2. agent 侧 `browser_status` → `connected: true`，并显示当前 `permission` 档。
 3. `browser_tab_open` 新开 `https://example.com` → 本地浏览器出现新标签页。
-4. `browser_navigate` 到带图页面 → `browser_snapshot` 输出含 `@eN` 的文本骨架（外层被 `<untrusted-page-content>` 包裹）。
-5. `browser_click` 点击某 `@eN` → 页面响应。
+4. `browser_navigate` 到带图页面 → `browser_snapshot` 输出含 `@s<gen>:e<N>` 的文本骨架（外层被 `<untrusted-page-content>` 包裹）。
+5. `browser_click` 点击某 `@s<gen>:e<N>` → 页面响应。再拍一次快照后用旧 ref 点击 → 报 `stale_ref`。
 6. `browser_screenshot` → agent 收到图片。
 7. 断开网络 → popup 变灰 → 恢复网络 → 自动重连变绿。
 8. 错误 token → 扩展 30s 慢退避；改正后保存 → 立即重连成功。
@@ -143,7 +143,7 @@ pnpm install && pnpm build
 ```bash
 pnpm install
 pnpm build            # protocol(tsc) → gateway(tsc) → extension(esbuild)
-pnpm test             # gateway 42 项单测/集成测（7 个文件，先 build）
+pnpm test             # gateway 46 项单测/集成测（7 个文件，先 build）
 pnpm typecheck        # 三包类型检查
 node scripts/smoke.mjs  # 端到端冒烟：gateway serve + 假扩展 + MCP HTTP 全链路
 pnpm --filter @browser-bridge/docs dev   # 文档站本地预览（localhost:5173）

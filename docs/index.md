@@ -24,8 +24,8 @@ features:
     title: 标准 MCP，Agent 零适配
     details: gateway 提供 MCP streamable HTTP（远程 agent）与 stdio（同机 agent）双入口，recursive / claude-code / codex 等 MCP 客户端即插即用。
   - icon: 🎯
-    title: "@eN 引用，快照即操控"
-    details: browser_snapshot 输出可访问性骨架并为可交互元素编号，点击、填入、按键直接引用 @eN，省 token 也免写选择器。
+    title: "@s<gen>:eN 引用，快照即操控"
+    details: browser_snapshot 输出可访问性骨架并为可交互元素编号（绑定快照代次），点击、填入、按键直接引用，省 token 也免写选择器；页面一变旧引用明确报 stale_ref，不静默错点。
   - icon: 🔒
     title: token 鉴权 + 权限档 + 导航允许列表
     details: 握手 token 不匹配即断连；--permission 三档（默认最窄 read-only）控制 Agent 能做什么；--allow-url 正则既校验入参也在导航实际发生处兜底拦截；传输加密交给 wss / Tailscale。
@@ -34,5 +34,5 @@ features:
     details: 截图直接以图片内容返回给多模态 Agent，页面执行 JS（MAIN world）可抽取任意页面数据。
   - icon: 🧩
     title: 与 web-bridge 同心智
-    details: "协议形状与 web-bridge 一致（{id, method, params} + @eN）——web-bridge 操控桌面 WebView，browser-bridge 操控真实浏览器。"
+    details: "协议形状与 web-bridge 一致（{id, method, params} + @s<gen>:e<N>）——web-bridge 操控桌面 WebView，browser-bridge 操控真实浏览器。"
 ---

@@ -7,6 +7,7 @@
  */
 import { spawn } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
+import { PROTOCOL_VERSION } from "../packages/protocol/dist/index.js";
 
 const TOKEN = "smoke-token";
 const CLI = new URL("../packages/gateway/dist/cli.js", import.meta.url).pathname;
@@ -61,7 +62,7 @@ ws.addEventListener("open", () => {
   ws.send(
     JSON.stringify({
       type: "hello",
-      proto: 2,
+      proto: PROTOCOL_VERSION,
       auth: TOKEN,
       client: { name: "fake-extension", version: "0.2.0" },
     }),
@@ -99,7 +100,7 @@ wsLaptop.addEventListener("open", () => {
   wsLaptop.send(
     JSON.stringify({
       type: "hello",
-      proto: 2,
+      proto: PROTOCOL_VERSION,
       auth: TOKEN,
       client: { name: "fake-extension", version: "0.2.0" },
       browserId: "laptop",

@@ -33,7 +33,7 @@ gateway 配了 `--allow-url` 允许列表。除了工具入参，扩展还会在
 
 ### `stale_ref` 频繁出现
 
-正常现象：页面跳转/刷新后 `@eN` 引用全部重编。重新 `browser_snapshot` 再操作。单页应用（SPA）内切换若不触发导航，引用仍然有效。
+正常现象：引用 `@s<gen>:e<N>` 绑定快照代次——再次 snapshot、页面跳转/刷新后旧引用全部失效（gateway/扩展双闸拦截，防止静默点到同序号的新元素）。重新 `browser_snapshot`，用最新一次返回的引用操作即可。
 
 ### `page_not_injectable`
 

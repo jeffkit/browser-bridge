@@ -1,6 +1,6 @@
 # browser-bridge 架构
 
-> 最后更新：2026-09-09（当前 0.4.0：多浏览器会话、公网 relay、Firefox 支持）
+> 最后更新：2026-09-09（当前 0.4.0：多浏览器会话、公网 relay、Firefox 支持；协议 v3：@s<gen>:e<N> 代次引用）
 
 ## 1. 组件
 
@@ -18,7 +18,7 @@ packages/
 │   └── mcp/
 │       ├── tools.ts  14 个 browser_* 工具（zod schema + handler，绑定 {hub, browserId} 目标）
 │       │             统一门禁包装：档位（minTier → permission_denied）+ owner（ownerScoped → tab_not_owned）
-│       │             另做 --allow-url 入参校验、snapshot/evaluate 不可信标记
+│       │             + ref 代次（refScoped → stale_ref）；另做 --allow-url 入参校验、snapshot/evaluate 不可信标记
 │       ├── server.ts McpServer 装配：createMcpServer(hub, browserId)，每 MCP 会话一实例
 │       └── http.ts   streamable HTTP：/mcp → default、/mcp/:browserId → 对应浏览器；
 │                     authenticate 钩子（relay 用）+ bearerToken 提取
@@ -31,7 +31,7 @@ packages/
     │   │                  page.evaluate 直接 api.scripting（支持 MAIN world）；
     │   │                  navigate/create 成功后登记 owned tab 与最后允许 URL
     │   └── index.ts       生命周期 + popup 状态查询 + navGuard.install/上报接线
-    ├── content/           动态注入（ISOLATED world）：@eN 快照与交互
+    ├── content/           动态注入（ISOLATED world）：@s<gen>:e<N> 快照与交互
     ├── common/api.ts      browser.*（Firefox）/ chrome.*（Chromium）适配层
     └── popup/ options/    状态显示 / gateway URL + token + 浏览器 ID 配置
     产物：dist-extension/（Chromium，manifest.json，SW 为 ESM）
@@ -42,14 +42,15 @@ packages/
 
 ```
 MCP 客户端 ── tools/call browser_click ──▶ McpServer(handler)
-   └▶ tools.ts 门禁：档位（--permission）→ owner（ownedTabs）→ --allow-url 入参校验
+   └▶ tools.ts 门禁：档位（--permission）→ owner（ownedTabs）→ ref 代次（tab 绑定表，旧 ref 即 stale_ref）
       └▶ BrowserSession.request("page.click", params)   （生成 id，挂 pending，超时 15s）
            └─ WS: {"type":"request","id","method","params"} ──▶ 扩展 service worker
                 └─ router.dispatch → ensureInjected（bb-probe / executeScript）
                      └─ chrome.tabs.sendMessage(bb-request) ──▶ content script
-                          └─ resolveElement(@eN) → dispatchEvent → 应答
+                          └─ resolveElement(@sN:eM，代次+连接双查) → dispatchEvent → 应答
 响应原路返回：content → SW → {"type":"result","id","ok","result|error"} → settle pending → MCP content
-（snapshot/evaluate 的结果在 tools.ts 打上 untrusted 标记后进入 agent 上下文）
+（snapshot/evaluate 的结果在 tools.ts 打上 untrusted 标记后进入 agent 上下文；
+ snapshot 同时把 {tabId → gen} 记入绑定表供后续 ref 校验，truncated 时在 text 尾部追加显式标记）
 
 导航兜底回路（--allow-url 非空时）：
 gateway hello 通过 ── WS allowlist{patterns} ──▶ 扩展 navGuard（owned tab 才生效）
@@ -64,7 +65,7 @@ gateway hello 通过 ── WS allowlist{patterns} ──▶ 扩展 navGuard（o
 |------|------|
 | 扩展出站 WS，gateway 不做 TLS | 扩展无法监听端口；TLS 交给 caddy/nginx/Tailscale，gateway 保持极简 |
 | 协议形状沿用 web-bridge（`{id,method,params}` / `{id,ok,result\|error}`） | 大仓内「页面操控」双仓心智一致 |
-| `@eN` 引用 + content script 内缓存 | 快照输出省 token；交互免传选择器；导航后缓存随注入重建自然失效 |
+| `@s<gen>:e<N>` 代次引用 + content script 内缓存 | 快照输出省 token；交互免传选择器；ref 绑定快照代次——新快照/换页后旧 ref 一律 `stale_ref`（双闸：gateway 按 tab 绑定表先拦、扩展按当前代次兜底），旧引用不会静默落到同序号的新元素上 |
 | MCP 双入口（streamable HTTP + stdio） | 远程 agent 用 HTTP；同机 agent 在 mcp_servers 里直接拉起，同进程内转发零跨进程桥 |
 | 每 MCP 会话一个 McpServer 实例，绑定 browserId | SDK stateful 模式惯例；`/mcp/:browserId` 路径即浏览器选择器，工具面完全不变 |
 | 多浏览器按 browserId 路由（同 ID 顶替、跨 ID 并存） | 一台 gateway/relay 管多台设备；browserId 白名单字符保证 URL 路径安全 |
@@ -82,7 +83,7 @@ gateway hello 通过 ── WS allowlist{patterns} ──▶ 扩展 navGuard（o
 
 扩展与 gateway 共用 protocol 的 `ErrorCode`：`auth_failed` / `browser_disconnected` / `timeout` / `method_not_found` / `bad_params` / `tab_not_found` / `screenshot_failed` / `navigation_timeout` / `page_not_injectable` / `page_action_failed` / `stale_ref` / `url_not_allowed` / `permission_denied` / `tab_not_owned` / `internal`。`ErrorCodeHints` 提供面向 agent 的排查提示（含该加哪个 `--permission` 档 / `--allow-foreign-tabs`），随 MCP 工具错误文本返回。
 
-线协议版本：`PROTOCOL_VERSION`（protocol/messages.ts）v2 = `allowlist`（gateway→扩展，导航兜底允许列表）+ `nav_blocked`（扩展→gateway，拦截上报）。改协议必须升版本号：hello 会拒旧客户端（fail-closed）。
+线协议版本：`PROTOCOL_VERSION`（protocol/messages.ts）v3 = `@s<gen>:e<N>` 代次引用（快照结果回带 `gen`/`truncated`，扩展与 gateway 双闸校验代次）；v2 = `allowlist`（gateway→扩展，导航兜底允许列表）+ `nav_blocked`（扩展→gateway，拦截上报）。改协议必须升版本号：hello 会拒旧客户端（fail-closed）。
 
 ## 5. 部署形态（原「扩展点」，现已实现）
 
@@ -96,7 +97,7 @@ gateway hello 通过 ── WS allowlist{patterns} ──▶ 扩展 navGuard（o
 
 ## 6. 测试
 
-- `packages/gateway/test/`：hub 集成测（鉴权/往返/超时/断开/顶替/心跳/allow-url/非法 browserId/多浏览器路由/allowlist 下发/nav_blocked 记录）+ 动作面策略（`issue3-permission-tiers.test.ts`：档位与 owner、不可信标记）+ 扩展导航守卫单测（`nav-guard.test.ts`，跨包直接驱动扩展源码）+ streamable HTTP 冒烟（路径绑定/401 鉴权）+ stdio 冒烟（spawn dist/cli.js）+ `call` 子命令冒烟。
+- `packages/gateway/test/`：hub 集成测（鉴权/往返/超时/断开/顶替/心跳/allow-url/非法 browserId/多浏览器路由/allowlist 下发/nav_blocked 记录）+ 动作面策略（`issue3-permission-tiers.test.ts`：档位与 owner、不可信标记、ref 代次绑定）+ 扩展导航守卫单测（`nav-guard.test.ts`，跨包直接驱动扩展源码）+ streamable HTTP 冒烟（路径绑定/401 鉴权）+ stdio 冒烟（spawn dist/cli.js）+ `call` 子命令冒烟。
 - `scripts/smoke.mjs`：真实 gateway 进程 + 双假扩展（default + laptop）+ MCP HTTP 全链路（含 allow-url 拦截、档位 `permission_denied` 与 `/mcp/laptop` 路由）。
-- `scripts/e2e.mjs`：Playwright 加载真实扩展跑全链路（`--permission full`）。
+- `scripts/e2e.mjs`：Playwright 加载真实扩展跑全链路（`--permission full`；含 ref 代次绑定断言：二次快照 gen 递增、旧 ref 报 stale_ref、新 ref 可用）。
 - Firefox 端：构建产物验证 + 手工验收（临时载入、权限授予）；自动化 E2E 收益低，v1 不做。

@@ -17,25 +17,26 @@ gateway 向 Agent 暴露 14 个 MCP 工具，完整参数见 [MCP 工具参考](
 
 档位由 gateway 启动参数 `--permission` 决定，**默认 `read-only`（最窄）**；档位不足返回 `permission_denied`。除状态类工具外，显式传入的 `tabId` 必须是本会话创建或导航过的标签页（否则 `tab_not_owned`）。
 
-## 核心循环：snapshot → @eN → act
+## 核心循环：snapshot → `@s<gen>:e<N>` → act
 
 操作页面的推荐方式，三步：
 
 ```text
 ① browser_snapshot
-   → 返回页面骨架，可交互元素带编号：
-     - @e12 textbox "搜索"
-     - @e13 button "搜索"
+   → 返回页面骨架（带 gen 代次），可交互元素带编号：
+     - @s3:e12 textbox "搜索"
+     - @s3:e13 button "搜索"
 
-② 读骨架，找到目标元素的 @eN
+② 读骨架，找到目标元素的 @s3:eN
 
-③ browser_click { "ref": "@e13" }
-   browser_fill  { "ref": "@e12", "value": "browser-bridge" }
+③ browser_click { "ref": "@s3:e13" }
+   browser_fill  { "ref": "@s3:e12", "value": "browser-bridge" }
 ```
 
 要点：
 
-- **页面跳转 / 刷新后旧 `@eN` 全部失效**，相关操作会返回 `stale_ref` 错误——重新 snapshot 即可，不要复用旧编号；
+- **引用绑定快照代次（`@s<gen>:e<N>`，写作 `@s3:e12`）**：再次 snapshot（gen+1）或页面跳转/刷新后，旧引用一律返回 `stale_ref`——即使元素还在同序号上也不会静默错点。重新 snapshot，用最新一次返回的引用；
+- 快照返回 `truncated: true` 时说明页面超出规模上限（800 节点/20 层），部分交互元素可能缺失——缩小范围（先滚动/导航到目标区块）后重拍；
 - `browser_fill` 是「清空后填入」，`browser_type` 是「追加输入」，清空重填一律用 fill；
 - 按键用 `browser_press`，如 `Enter`、`Escape`、`Control+a`（修饰键用 `+` 连接）。
 
@@ -47,12 +48,12 @@ Agent 完成登录（示意）：
 Agent: browser_navigate { "url": "https://example.com/login" }
        → { "status": "complete", "title": "登录" }
 Agent: browser_snapshot
-       → - @e3 textbox "用户名"
-         - @e4 textbox "密码"  [type=password]
-         - @e5 button "登录"
-Agent: browser_fill { "ref": "@e3", "value": "alice" }
-Agent: browser_fill { "ref": "@e4", "value": "••••••" }
-Agent: browser_click { "ref": "@e5" }
+       → - @s1:e3 textbox "用户名"
+         - @s1:e4 textbox "密码"  [type=password]
+         - @s1:e5 button "登录"
+Agent: browser_fill { "ref": "@s1:e3", "value": "alice" }
+Agent: browser_fill { "ref": "@s1:e4", "value": "••••••" }
+Agent: browser_click { "ref": "@s1:e5" }
 Agent: browser_screenshot
        → （返回图片，确认登录成功）
 ```

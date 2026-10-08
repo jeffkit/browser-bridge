@@ -29,7 +29,7 @@ browser-bridge 让运行在**远程机器**上的 AI Agent 操控你**本地浏�
 
 - **本地零暴露**：浏览器扩展无法监听端口，因此由扩展**主动出站**连 gateway。你的电脑不开任何入站端口，唯一前提是「本地能访问 gateway 所在机器的端口」。
 - **标准 MCP**：Agent 侧不需要任何专属 SDK——凡是 MCP 客户端（recursive、claude-code、codex、Cursor 等）都能直接用。
-- **快照即操控**：`browser_snapshot` 返回页面的可访问性骨架，可交互元素被编号为 `@e1`、`@e2`…，后续 `browser_click @e12` 直接引用，无需 CSS 选择器。
+- **快照即操控**：`browser_snapshot` 返回页面的可访问性骨架，可交互元素被编号为 `@s<gen>:e1`、`@s<gen>:e2`…（带快照代次），后续 `browser_click @s3:e12` 直接引用，无需 CSS 选择器；页面一变旧引用即明确报错，不会静默错点。
 - **与 web-bridge 呼应**：协议形状与 [web-bridge](https://github.com/jeffkit/web-bridge) 一致——那边操控 Electron/Tauri 桌面 WebView，这边操控真实浏览器。
 
 ## 适合与不适合
